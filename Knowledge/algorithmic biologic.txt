@@ -1,0 +1,50 @@
+
+
+
+
+long term meories are formed my physiological changes through DNA, rather then through refactory periods
+    - the physical changes try to stabilize the environment, like a lerp
+
+
+
+
+- Three levels of speed to top like acceleration on top of acceleration 
+    - Activity / refactory preiod
+    - Number of recpectors in the pool
+    - Gene expression for the number of recpetors
+
+
+- If a neuron hasnt been 'hit' in a while it will upregulate excitatory receptors (like AMPA or NMDA) or downregulate inhibitory receptors (like GABA-A)
+
+
+- At a whole neuron level if the excitation falls below a certain amount, it might make more recpetors to become more sensitive
+
+
+- With more NMDA, if you get a successful firing, it makes more of a log term change to the cell & learning
+    - It lowers the threshold for triggering plasticity mechanisms once coincidence is detected
+
+
+- Developing neurons often exhibit a higher NMDA/AMPA ratio initially
+
+- NMDA is a coincidence detector, because, when the activation comes into the presynaptic neuron, it requires the downstream activation to be HIGH (not triggered yet), so it like 'I will fire if you will fire'
+So NMDA is like 'I will fire if you will fire', where as AMPA is more like 'fire if I get enough activation'
+
+
+- If a postsynaptic neuron fires there can be a Back Propagating Signal (BPAP) that when combined with the existing NMDA in the presynaptic neuron is enough to make the presynaptic neuron fire.
+
+
+- If there is a negative correletion spike timing wise, it will change the presynaptic neurotransmitter to be 
+
+- A neuron is typically specified during development to be either excitatory or inhibitory based on its genetic programming
+    - In the prefrontal cortex its a mixture of neurons
+    - Also the hebb rule works in reverse for inhibitory neurons
+
+
+-  Fast-Spiking (FS) Interneurons.
+
+
+- inhibitory neurons (interneurons) themselves are a minority. In the cortex, roughly 80-85% of neurons are excitatory (mostly pyramidal cells), and 15-20% are inhibitory (GABAergic interneurons).
+
+- FS Neurons within the Inhibitory Population: Fast-Spiking (FS) neurons are a major subtype of inhibitory interneurons. The most common type of FS neuron expresses the protein Parvalbumin (PV+). These PV+ FS neurons make up a significant fraction of all inhibitory interneurons – often estimated at around 40-50% of the GABAergic population in many cortical areas.
+
+- Essentially zero percent (0%) of the excitatory neuron population are considered Fast-Spiking (FS)

@@ -1,0 +1,102 @@
+
+
+- Maybe rewards need to correspond to target positons of values, so its just been just the right amount of time, then it wont go up or down?
+    - Only if its outside of the thing does it go up or down?
+        - Rolling time to fire etc...
+            - Less static values more rolling values?
+    - Thoughts generally like 99% dont enter long term momory, so we need to reset the values back to the short term, the weights are the long term
+        - The chemical modifers are the short term, if we get new info STM, will need to still change the weights 
+    - Maybe this is where ideals some in?
+    - Combining the chemical and the physical into one weight? two values the overlap? Or maybe its a lerp between the two that is computed?
+        - It would be more efficient if the chemical was just a modifier on the physical
+        - Then you have a sleep phase? where the validity of the chemical is tested somehow?
+            - How do you even check validity? Relevance? Was it hit more than once? Am I happy with the value being lower?
+            - Time marker, tomorrow does it remain at the same value? Even after it has faded back a bit to the default value?
+            - Moment to moment relevance can fluctuate massively
+
+    - Punishment and reward go into the modifier?
+        - Is it statained at low level? If so then decrese?
+            - Its basically like ball and chain in some sense?
+
+
+
+- Maybe not rely on desire to fire so much as a crutch, it should balance on its own better, there should be more woves that occur naturally
+
+
+- If something fires and it has been ages, then increase the strength of the incoming 
+
+- Maybe the threshold is something that has velocity to it, becaseu if it fires after ages it will reward the connection, but if the trhreshold goes right up again it may no firgain, and then will recieve punishment 
+
+
+
+- Properly calculate the amount of overshoot, and distribute it in terms of punishment 
+    - Maybe we need to concept of an 'ideal' value, and it moves towards that?, rather than a fraction, make the function take an ideal?
+     - Only back distribute negative to the ones that fired into it
+
+- Randomize the order of pickup from the vector
+
+- Add a line of noise, to see what happens?...
+
+
+
+- Do we need to thgink about changing the algorithm to making running strips that are always running?
+
+- Its not a linear reduction of desire to fire, as it approaches 0 it multiplies down so gets slower
+
+
+- Add pixel debugger for the dead pixels...
+
+
+
+- Explain to AI the problem
+
+- Add the concept of physiological strength to the connection so that a bad day wont disrupt everything
+
+
+- Ability to set trap for neuron, that will do loging on a single neuron in terms of firing etc.., OR we could use enbiten to display on screen text of activation?
+
+
+- Maybe use gradients for the reward/punish stuffs
+
+
+
+- Maybe the network needs more fuziness?
+
+
+
+
+- If A fires then B fires, then that doesn't necessarily mean that there should be a change in strength
+
+
+
+- Every timetep do we need to take something from the shortterm and move a fraction to the longterm?
+    - For connection weights, if i fire and you dont fire soon, i will move to a negative?
+    - How would this work if its overall cells?
+    
+
+- Get basic cooldown and firing pattern, so you can accumialte into a cell threshold will fire, over timesteps the amount will go down, no update required
+
+
+
+- Figure out a genric way to do predictive firing, so not brute force iterating, only on change perhaps
+
+
+- Get the grids initalizing
+- Have two layers, one for positive, one or negative, make every other null
+- Get the grid looping 
+
+
+- Maybe think about not having two kinds of neuron, since the first half is the same, in terms of excitation
+    - We could just define the amounts of neurotransmitter, and that defines whether it will fire, or maybe the outgoing connection has the definition on it?
+        - Like if it fires
+
+- Figure out: What is the machanism for 'not wanting to have any influence over a cell': 'thin connection'?
+    - Is this just misfirings?
+
+
+
+
+
+
+
+

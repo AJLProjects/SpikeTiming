@@ -1,0 +1,33 @@
+
+
+
+coincidence detector / coincidence detection
+
+
+
+if there is too much activation under why would it not increase AMPA or NMDA and decrease GABA-A, in what situations would it just increase one, and not alter all three?
+
+
+why is glutamate receptor expression (involved in craving and relapse)?
+
+
+- Is this the key to enenforcement learning??? V V V
+Example (Drugs of Abuse): Many addictive drugs hijack neuromodulatory systems (like dopamine). Chronic exposure can lead to adaptive changes where, for instance, certain dopamine receptor subtypes might be downregulated (tolerance), while compensatory changes might occur in glutamate receptor expression (involved in craving and relapse), potentially making glutamate signaling more dominant in specific circuits related to addiction.
+
+
+NMDA receptors are the key molecular machinery for inducing many forms of synaptic plasticity (like LTP and LTD) 
+
+
+what are NMDARs?
+
+
+- Specific ions flowing through specific receptor channels (NMDA, AMPA, GABA-A, etc.), G-protein cascades, phosphorylation, gene expression.
+
+- principal projection neurons
+
+
+- Autapses
+
+- Ephaptic Coupling
+
+- Reciprocal Synapses

@@ -1,0 +1,89 @@
+
+
+- Depolarization is excitatory
+
+- dopamine itself isn't inherently excitatory or inhibitory
+	- Its effect depends entirely on which type of receptor it binds to
+
+
+- Two methods of depolarization(Negative weight)
+	- Opening potassium(k+) channels, makes the inside more negative
+	- Closing calcium (C12+) channels reduces influx of positive calcium
+	
+	- calcium makes it fire 
+	- potassium makes it close off
+		
+- mesolimbic pathway is the only pathway where dopamine is release for eating something sweet. This is more in the core of the brain, the rest skirts round the outside. This is the reward centre.
+
+
+
+-  If a neuron consistently receives low levels of a particular neurotransmitter, it might increase the number of receptors for that neurotransmitter to become more sensitive (e.g., in response to denervation or low activity).
+	- The inverse if true, bombardment results in fewer receptors
+
+
+- The frequency of the cell changes the number of recpetors, perhaps through the autobalancing method
+
+
+- When there is a successful 'fire together', the more AMPA receptors are added (semi-permanant), which makes the thing more receptive to triggering
+    - Inverse is true, AMPA recptors can be taken away on bad firing
+
+
+
+- Neuromodulators (like dopamine, serotonin, acetylcholine, norepinephrine) don't always directly cause rapid excitation or inhibition. Instead, they trigger slower intracellular signaling cascades (often via G-protein coupled receptors) that can modify the state or expression levels of other receptors.
+
+
+- Different presynaptic neurons might preferentially release neurotransmitters that activate specific subtypes of receptors on the postsynaptic neuron.
+
+
+
+- Is this the key to enenforcement learning??? V V V
+Example (Drugs of Abuse): Many addictive drugs hijack neuromodulatory systems (like dopamine). Chronic exposure can lead to adaptive changes where, for instance, certain dopamine receptor subtypes might be downregulated (tolerance), while compensatory changes might occur in glutamate receptor expression (involved in craving and relapse), potentially making glutamate signaling more dominant in specific circuits related to addiction.
+
+
+
+
+- AMPA receptors are better at pure excitation than NMDA 
+
+
+- NMDA receptors are the key molecular machinery for inducing many forms of synaptic plasticity (like LTP and LTD) 
+
+
+- By increasing the number or function of NMDA receptors relative to AMPA receptors, the neuron makes each instance of successful coincidence detection more impactful. It lowers the threshold for triggering plasticity mechanisms once coincidence is detected, even if the baseline synaptic strength (mediated by AMPA) is moderate or even reduced. It's like turning up the "learning gain" knob.
+
+
+NMDA receptors have slower activation and deactivation kinetics compared to AMPA receptors. This means they stay open longer, contributing to a more prolonged depolarization and integrating signals over a slightly longer time window.
+
+The need for prior depolarization means NMDA receptors are inherently sensitive to the recent history of activity at the synapse or in the neuron. A single, weak input might only activate AMPA receptors, but repeated or synchronized inputs are needed to depolarize enough to engage the NMDA receptors effectively.
+
+Increasing the NMDA/AMPA ratio makes the neuron's output more dependent on the temporal summation of inputs required to relieve the Mg2+ block. It shifts the neuron from being a simple relay to being a better detector of specific temporal patterns or sustained activity.
+
+
+Another possibility: A back-propagating action potential (BPAP). If the postsynaptic neuron does fire an AP (initiated at the axon hillock), that AP can sometimes travel backwards into the dendrites. If this wave of depolarization reaches a synapse while glutamate is bound to the NMDA receptors there, it can provide the necessary depolarization to unblock them. This links postsynaptic firing activity directly to NMDAR activation at specific inputs.
+
+
+Within the prefrontal cortex I there is a mixture of Pyramidal Cells, Spiny Stellate Cells, Parvalbumin-expressing, Somatostatin-expressing, Vasoactive Intestinal Peptide-expressing?
+
+
+
+The simple idea of "dopamine = reward signal" does seem problematic because of the time delay.
+Here's how neuroscientists understand this "retroactive reinforcement" works:
+Dopamine is More Than Just "Reward": It's "Reward Prediction Error":
+The modern understanding, largely based on the work of Wolfram Schultz and colleagues, is that dopamine doesn't just signal that a reward occurred. Instead, it primarily signals the difference between the expected reward and the actual reward received. This is called the Reward Prediction Error (RPE).
+Positive RPE: If something better than expected happens (you press a lever and get two food pellets instead of the usual one, or you get one when you expected none), there's a burst of dopamine.
+No RPE: If things happen exactly as expected (you press the lever and get the usual one pellet), there's no significant change in baseline dopamine firing.
+Negative RPE: If something worse than expected happens (you press the lever expecting a pellet but get nothing), there's a dip or pause in dopamine firing below baseline.
+Synaptic Eligibility Traces: Bridging the Time Gap:
+This is the crucial mechanism for connecting the past action with the later dopamine signal.
+When neurons fire during an action or in response to a cue leading to an action, the synapses involved don't just activate and then immediately reset. They leave behind a temporary biochemical "tag" or "trace" – an eligibility trace.
+Think of it like putting a temporary sticky note on the synapses that were recently active and potentially contributed to the behavior being evaluated. These synapses are marked as "eligible" for modification.
+This trace lasts for a short period (seconds, potentially longer depending on the specific mechanism).
+Dopamine Acts on Eligible Synapses:
+When the dopamine surge (positive RPE) arrives slightly later, it doesn't just wash over the brain randomly. It preferentially modulates (strengthens) those synapses that currently have an active eligibility trace.
+The dopamine acts as a "confirmation" or "reinforcement" signal specifically for the connections that were active just before the unexpected good outcome.
+Conversely, a dopamine dip (negative RPE) might weaken synapses with eligibility traces or prevent them from being strengthened.
+The Result: Strengthening the Right Connections:
+The dopamine surge effectively reaches back in time (via the eligibility trace) to strengthen the specific synaptic connections that were involved in the action (or processing the cues that led to the action) which resulted in the better-than-expected outcome.
+This strengthens the likelihood that the same cues will trigger the same action in the future, because the neural pathway linking them has been potentiated (e.g., through Long-Term Potentiation, LTP).
+Analogy:
+Imagine you're exploring a maze (actions). You take a specific turn (synapses become active and get eligibility traces). A few seconds later, you unexpectedly find a piece of cheese (reward > expected -> dopamine burst). The dopamine release acts like a signal saying "Whatever you just did that led to this pleasant surprise was good!" It then strengthens the "memory" (synaptic connection) of taking that specific turn when you were in that part of the maze. The eligibility trace was the temporary note reminding your brain which turn it was.
+In summary: Dopamine isn't too late because the synapses involved in the preceding action remain temporarily "tagged" or "eligible" for modification. The dopamine signal (representing prediction error) then acts on these tagged synapses to strengthen the connections that led to the unexpectedly good outcome, effectively reinforcing the behavior retroactively.
