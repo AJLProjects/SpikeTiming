@@ -1,5 +1,10 @@
 
 
+- Have a shortterm modifier, that lerps into the the long term
+    - lastUpdated on the short term modifier
+    - upateFunction()
+
+
 - Maybe rewards need to correspond to target positons of values, so its just been just the right amount of time, then it wont go up or down?
     - Only if its outside of the thing does it go up or down?
         - Rolling time to fire etc...
@@ -18,6 +23,10 @@
         - Is it statained at low level? If so then decrese?
             - Its basically like ball and chain in some sense?
 
+
+- Code in NMDA receptors, social firing
+
+- May need to pass through time an an integer so that it can be used for == checks
 
 
 - Maybe not rely on desire to fire so much as a crutch, it should balance on its own better, there should be more woves that occur naturally
