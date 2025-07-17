@@ -73,7 +73,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 
 	// Recalculate threshold
 	var lastFireTimeDelta = time - n.LastfireTime
-	var desireToFireComp = -math.Min(math.Pow(lastFireTimeDelta/100, 1.2)*0.003, 0.99)
+	var desireToFireComp = -math.Min(lastFireTimeDelta/5000, 0.99)
 	var absoluteRefactoryPeriod = SPIKE_DURATION * 2
 	var justFiredDepolarization = math.Pow(math.Max(absoluteRefactoryPeriod-lastFireTimeDelta, 0)/absoluteRefactoryPeriod, 0.5) * 3 // Multiply the SPIKE_DURATION by 2 to get teh absolute refactory period
 	n.Threshold = 1.0 + desireToFireComp + justFiredDepolarization
@@ -84,7 +84,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 
 		var overShootThreshold = 1.5 // Need to add 0.5 because a single normal fire may overshoot naturally
 		var overshoot = math.Max(n.Activation-overShootThreshold, 0.0)
-		var overshootCorrector = math.Tanh(overshoot/2.0) * 0.8
+		var overshootCorrector = math.Tanh(overshoot/2.0) * 0.3
 
 		// Send reward or punsih to presynaptic dendrites
 		for _, c := range n.Incoming {
@@ -95,14 +95,14 @@ func (n *Neuron) CheckForFiring(time float64) {
 				var changeAmount = 0.2 + (CONTRIBUTION_REWARD_WINDOW-firedDurationAgo)/CONTRIBUTION_REWARD_WINDOW
 
 				// more reward to the connection if this neuron hasnt fired in a while
-				changeAmount += math.Pow(lastFireTimeDelta/700, 1.5)
+				changeAmount += math.Pow(lastFireTimeDelta/1000, 2)
 
 				if c.IsExcitatory {
 					if overshoot > 0.001 {
 						//c.DebugLast = "Overshoot by " + fmt.Sprintf("%f", overshootMultiplier)
 						c.Strength = PunishValue(c.Strength, overshootCorrector) //TOO Punishing in certain circumstances
 					} else {
-						c.Strength = RewardValue(c.Strength, 0.06*changeAmount, 1.5)
+						c.Strength = RewardValue(c.Strength, 0.07*changeAmount, 1.5)
 					}
 				} else { // Negative
 					//c.DebugLast = "Negative, postsynaptic fired"
@@ -112,7 +112,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 			} else { // Punish the connection because it wasn't involved in the cause of its firing
 				if c.IsExcitatory {
 					//c.DebugLast = "Wasnt involved in firing"
-					c.Strength = PunishValue(c.Strength, 0.01*c.Strength)
+					c.Strength = PunishValue(c.Strength, 0.005*c.Strength)
 				}
 			}
 			c.IsAwaitingReward = false
@@ -122,6 +122,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 		n.LastfireTime = time
 		n.Activation = 0
 		for _, c := range n.Outgoing {
+
 			if c.IsExcitatory {
 
 				c.To.UpdateActivationOnly(time)
@@ -131,10 +132,10 @@ func (n *Neuron) CheckForFiring(time float64) {
 					//c.DebugLast = "Fired into spike"
 					c.Strength = PunishValue(c.Strength, 0.03)
 				} else { // Normal firing, punish up front for rewward later
-					c.To.Activation += c.Strength * c.MagnitudeMultiplier // We could add a magnitude multiplyer to the cell, default to 0.15 to allow the growth to always be between 0 and 1
+					c.To.Activation += c.Strength // We could add a magnitude multiplyer to the cell, default to 0.15 to allow the growth to always be between 0 and 1
 					c.IsAwaitingReward = true
 					//c.DebugLast = "Normal firing"
-					c.Strength = PunishValue(c.Strength, 0.01)
+					c.Strength = PunishValue(c.Strength, 0.008)
 				}
 
 				// Because we have added activation to the next neuron we will check if it has fired
@@ -151,13 +152,32 @@ func (n *Neuron) CheckForFiring(time float64) {
 				var existingActivation = c.To.Activation
 				var reward = existingActivation - 0.4 // Only reward if the activation is above 0.4
 
-				c.To.Activation -= c.Strength * c.MagnitudeMultiplier
+				c.To.Activation -= c.Strength
 
 				if reward > 0 {
+					c.IsAwaitingReward = true
 					c.Strength = RewardValue(c.Strength, reward*0.1, 1.5) // Should only reward based on the amount of activation there
-				} else {
+				} else { // Reward is always negative here
 					//c.DebugLast = "Punish negative for firing onto no activation"
-					c.Strength = PunishValue(c.Strength, -reward*0.1*c.Strength)
+					c.Strength = PunishValue(c.Strength, -reward*0.05*c.Strength)
+				}
+			}
+		}
+	} else if n.Activation > 0.7 { // Nearly fired
+		// This block is for NMDA
+		// Go through the connections and see who recently fired, very slighly reward with more weight
+
+		var rewardAmount = n.Activation - 0.7
+
+		// This effect is very minor, if it nearly fired but doesnt, reward the connection
+		for _, c := range n.Incoming {
+			var firedDurationAgo = time - c.From.LastfireTime
+			if c.IsAwaitingReward && firedDurationAgo < CONTRIBUTION_REWARD_WINDOW/2 { // Half the of the contribution reward window
+				var timingReward = 1.0 / math.Pow(firedDurationAgo+5, 1.5) //+5 to reduce the ratio between 1 and 2
+				if c.IsExcitatory {
+					c.Strength = RewardValue(c.Strength, 0.5*rewardAmount*timingReward, 1.5) // This needs to be belenced with the amount of upfront punish
+				} else { // Want to punish negative neurons because they dont like activation, this effect should be even more mild because
+					c.Strength = PunishValue(c.Strength, 0.1*rewardAmount*timingReward) // This needs to be belenced with the amount of upfront punish
 				}
 			}
 		}
@@ -217,11 +237,10 @@ func connectExcitatory(brain *Brain, n *Neuron) {
 				neuronToConnectTo := &targetNeuronsSlice[i]
 
 				var con = Connection{
-					From:                n,
-					To:                  neuronToConnectTo,
-					IsExcitatory:        true,
-					Strength:            rand.Float64()*0.1 + 0.1,
-					MagnitudeMultiplier: 1,
+					From:         n,
+					To:           neuronToConnectTo,
+					IsExcitatory: true,
+					Strength:     rand.Float64()*0.1 + 0.1,
 				}
 
 				n.AddOutgoingConnection(&con)
@@ -260,11 +279,10 @@ func connectInhibitory(brain *Brain, n *Neuron) {
 				neuronToConnectTo := &targetNeuronsSlice[i]
 
 				var con = Connection{
-					From:                n,
-					To:                  neuronToConnectTo,
-					IsExcitatory:        false,
-					Strength:            rand.Float64() * 0.05,
-					MagnitudeMultiplier: 1,
+					From:         n,
+					To:           neuronToConnectTo,
+					IsExcitatory: false,
+					Strength:     rand.Float64() * 0.05,
 				}
 
 				n.AddOutgoingConnection(&con)

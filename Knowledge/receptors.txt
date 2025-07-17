@@ -2,6 +2,9 @@
 AMPA Receptor (Glutamate): "I open and cause excitation immediately if I bind glutamate (the presynaptic signal)." - The Fast 'Go' Switch.
 
 NMDA Receptor (Glutamate): "I only open fully and let Ca2+ in if glutamate is bound AND the postsynaptic neuron is already significantly depolarized." - The Coincidence-Detector 'Learn' Switch.
+    Is the presynaptic neuron (the sender) active at the same time that the postsynaptic neuron (the receiver) is also active?
+    It helps sustain the depolarization. Its like holding the door open.
+    It doent require postsynaptic firing to take effect.
 
 Other Receptor Analogies:
 

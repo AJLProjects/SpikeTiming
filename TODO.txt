@@ -1,8 +1,22 @@
 
 
-- Have a shortterm modifier, that lerps into the the long term
-    - lastUpdated on the short term modifier
-    - upateFunction()
+- Tweak and think about balance and timings and ratios more, it doent look exactly how I would like
+
+
+- Do we just need to ignore multithreading for a second?
+    - Get it working on a seingle thread?
+
+
+
+- NMDA, jumps up to meet a level, needs rearchitecting so that there is a difinitive order to the firing to that a late fire can be punished   
+    - Might be a way to implement NMDA withing rearchitecting, needs more reseach but it might need to check often if its met, maybe cache 'Needed for firing' amount so regular iteration not needed?
+
+
+
+
+
+- Ball and chain the weight
+
 
 
 - Maybe rewards need to correspond to target positons of values, so its just been just the right amount of time, then it wont go up or down?
@@ -23,6 +37,13 @@
         - Is it statained at low level? If so then decrese?
             - Its basically like ball and chain in some sense?
 
+
+
+- Long term memories need to remain stable, how will this happen?
+
+
+
+- It needs to remain stable after firing
 
 - Code in NMDA receptors, social firing
 
