@@ -53,10 +53,10 @@ func (n *Neuron) AddOutgoingConnection(con *Connection) {
 	n.Outgoing = append(n.Outgoing, con)
 }
 
-func (n *Neuron) InitialConnect(brain *Brain) {
+func (n *Neuron) InitialConnect(brain *Brain, brainSquare *BrainSquare) {
 
 	if n.IsExcitatory {
-		connectExcitatory(brain, n)
+		connectExcitatory(brain, brainSquare, n)
 	} else {
 		connectInhibitory(brain, n)
 	}
@@ -73,7 +73,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 
 	// Recalculate threshold
 	var lastFireTimeDelta = time - n.LastfireTime
-	var desireToFireComp = -math.Min(lastFireTimeDelta/5000, 0.99)
+	var desireToFireComp = -math.Min(lastFireTimeDelta/8000, 0.99)
 	var absoluteRefactoryPeriod = SPIKE_DURATION * 2
 	var justFiredDepolarization = math.Pow(math.Max(absoluteRefactoryPeriod-lastFireTimeDelta, 0)/absoluteRefactoryPeriod, 0.5) * 3 // Multiply the SPIKE_DURATION by 2 to get teh absolute refactory period
 	n.Threshold = 1.0 + desireToFireComp + justFiredDepolarization
@@ -95,7 +95,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 				var changeAmount = 0.2 + (CONTRIBUTION_REWARD_WINDOW-firedDurationAgo)/CONTRIBUTION_REWARD_WINDOW
 
 				// more reward to the connection if this neuron hasnt fired in a while
-				changeAmount += math.Pow(lastFireTimeDelta/1000, 2)
+				changeAmount += math.Pow(lastFireTimeDelta/5000, 2)
 
 				if c.IsExcitatory {
 					if overshoot > 0.001 {
@@ -132,7 +132,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 					//c.DebugLast = "Fired into spike"
 					c.Strength = PunishValue(c.Strength, 0.03)
 				} else { // Normal firing, punish up front for rewward later
-					c.To.Activation += c.Strength // We could add a magnitude multiplyer to the cell, default to 0.15 to allow the growth to always be between 0 and 1
+					c.To.Activation += c.Strength // * PosOnlyRandMultiplier(c.Strength*0.001) // We could add a magnitude multiplyer to the cell, default to 0.15 to allow the growth to always be between 0 and 1
 					c.IsAwaitingReward = true
 					//c.DebugLast = "Normal firing"
 					c.Strength = PunishValue(c.Strength, 0.008)
@@ -163,11 +163,11 @@ func (n *Neuron) CheckForFiring(time float64) {
 				}
 			}
 		}
-	} else if n.Activation > 0.7 { // Nearly fired
+	} else if n.Activation > n.Threshold*0.8 { // Nearly fired
 		// This block is for NMDA
 		// Go through the connections and see who recently fired, very slighly reward with more weight
 
-		var rewardAmount = n.Activation - 0.7
+		var rewardAmount = n.Activation - (n.Threshold * 0.8)
 
 		// This effect is very minor, if it nearly fired but doesnt, reward the connection
 		for _, c := range n.Incoming {
@@ -175,7 +175,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 			if c.IsAwaitingReward && firedDurationAgo < CONTRIBUTION_REWARD_WINDOW/2 { // Half the of the contribution reward window
 				var timingReward = 1.0 / math.Pow(firedDurationAgo+5, 1.5) //+5 to reduce the ratio between 1 and 2
 				if c.IsExcitatory {
-					c.Strength = RewardValue(c.Strength, 0.5*rewardAmount*timingReward, 1.5) // This needs to be belenced with the amount of upfront punish
+					c.Strength = RewardValue(c.Strength, 0.3*rewardAmount*timingReward, 1.5) // This needs to be belenced with the amount of upfront punish
 				} else { // Want to punish negative neurons because they dont like activation, this effect should be even more mild because
 					c.Strength = PunishValue(c.Strength, 0.1*rewardAmount*timingReward) // This needs to be belenced with the amount of upfront punish
 				}
@@ -206,30 +206,37 @@ func (n *Neuron) AddActivation(amount float64, time float64) {
 	n.CheckForFiring(time)
 }
 
-func connectExcitatory(brain *Brain, n *Neuron) {
+func connectExcitatory(brain *Brain, brainSquare *BrainSquare, n *Neuron) {
 
 	var sourceX = n.ParentSquare.PosX
 	var sourceY = n.ParentSquare.PosY
 
-	var spread = int(10)
-	var depth = int(10)
-
-	var spreadStart = sourceY - spread/2 + 1
-	var spreadEnd = sourceY + spread/2 + 1
+	var radiusI = 5
+	var radiusF = float64(radiusI)
 
 	var numberOutgoing = 0
 
-	for y := spreadStart; y < spreadEnd; y++ {
+	// Not sure why these are flipped?
+	var circlePositionX = int(float64(sourceX) + float64(brainSquare.DirVecX*(radiusF+1.0)))
+	var circlePositionY = int(float64(sourceY) + float64(brainSquare.DirVecY*(radiusF+1.0)))
 
-		for x := sourceX + 1; x <= sourceX+depth; x++ {
+	for y := -radiusI; y <= radiusI; y++ {
+		for x := -radiusI; x <= radiusI; x++ {
 
-			var dist = math.Sqrt(math.Pow(float64(x-sourceX-1), 2) + math.Pow(float64(y-sourceY), 2))
+			var dist = math.Sqrt(math.Pow(float64(x), 2) + math.Pow(float64(y), 2))
 
-			if dist > 10 {
+			if dist > radiusF {
 				continue
 			}
 
-			wrappedX, wrappedY := brain.WrapPosition(x, y)
+			mappedPosX := x + circlePositionX
+			mappedPosY := y + circlePositionY
+
+			if mappedPosX == sourceX && mappedPosY == sourceY {
+				continue // Dont connect to self
+			}
+
+			wrappedX, wrappedY := brain.WrapPosition(mappedPosX, mappedPosY)
 
 			targetNeuronsSlice := brain.BrainSquares[wrappedX][wrappedY].Neurons
 
@@ -256,8 +263,8 @@ func connectInhibitory(brain *Brain, n *Neuron) {
 	var sourceX = n.ParentSquare.PosX
 	var sourceY = n.ParentSquare.PosY
 
-	var spread = int(10)
-	var depth = int(4)
+	var spread = int(6)
+	var depth = int(6)
 
 	var spreadStart = sourceY - spread/2
 	var spreadEnd = sourceY + spread/2
@@ -267,11 +274,15 @@ func connectInhibitory(brain *Brain, n *Neuron) {
 
 	var numberOutgoing = 0
 
-	for y := spreadStart; y < spreadEnd; y++ {
+	for y := spreadStart; y <= spreadEnd; y++ {
 
-		for x := depthStart; x < depthEnd; x++ {
+		for x := depthStart; x <= depthEnd; x++ {
 
 			wrappedX, wrappedY := brain.WrapPosition(x, y)
+
+			if wrappedX == sourceX && wrappedY == sourceY {
+				continue // Dont connect to self
+			}
 
 			targetNeuronsSlice := brain.BrainSquares[wrappedX][wrappedY].Neurons
 

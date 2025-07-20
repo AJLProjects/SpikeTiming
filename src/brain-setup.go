@@ -18,18 +18,17 @@ func checkWholeNumber(brainWidth int, numberOfCores int) {
 	}
 }
 
-func SetUpBrain() *Brain {
+// 5k*5k is 25 million, just enough this takes up 50GB AT LEAST
+// 200 is standard
+func SetUpBrain(brainWidth int, brainHeight int, brainPattern []byte) *Brain {
+
+	fmt.Printf("Size: %v %v \n", brainWidth, brainHeight)
 
 	threads := runtime.NumCPU()
 	fmt.Printf("This machine has %d CPU threads. \n", threads) // 32 for my pc
 	runtime.GOMAXPROCS(threads)
 
 	fmt.Println("Creating Neuron Grid...")
-
-	//5k*5k is 25 million, just enough this takes up 50GB AT LEAST
-	// 200 is standard
-	brainWidth := 960
-	brainHeight := 1000
 
 	checkWholeNumber(brainWidth, threads)
 
@@ -39,7 +38,7 @@ func SetUpBrain() *Brain {
 
 	fmt.Println("Making brain")
 
-	myBrain := NewBrain(brainWidth, brainHeight, threads)
+	myBrain := NewBrain(brainWidth, brainHeight, threads, brainPattern)
 
 	myBrain.AddStandardNeurons()
 

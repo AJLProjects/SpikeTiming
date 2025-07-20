@@ -1,5 +1,27 @@
 
 
+
+
+
+
+- Lower the refactory time for entry nodes
+
+
+Successes perhaps keep the short term locked in place, while the long term moves to wards it.
+    If there are no successes, then the short term will move towards the long term
+    It locks it back in place, and resets the lerp?
+    Maybe the long terms will always slowly move towards the short term, its just weather the short term will rever back to the long term?
+        Maybe there is some kind of acceleration type thing?
+            If the long term satys high relation, but its keeps getting no relation signals, then the long term needs to adjust
+
+
+
+- Need more thought about the ball and chain?
+
+
+- How is non linearity achieved? Trial and error? Correlations?
+
+
 - Tweak and think about balance and timings and ratios more, it doent look exactly how I would like
 
 

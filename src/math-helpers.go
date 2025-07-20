@@ -1,6 +1,9 @@
 package main
 
-import "math"
+import (
+	"math"
+	"math/rand"
+)
 
 func PunishValue(val float64, fraction float64) float64 {
 
@@ -19,4 +22,8 @@ func RewardValue(val float64, fraction float64, max float64) float64 {
 
 	var remaining = max - val
 	return val + remaining*fraction
+}
+
+func PosOnlyRandMultiplier(size float64) float64 {
+	return 1.0 + (rand.ExpFloat64() * size)
 }

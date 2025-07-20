@@ -21,17 +21,36 @@ type BrainSquare struct {
 	PosY            int
 	NumberOfNeurons int
 	Neurons         []Neuron
+	isWall          bool
+	DirVecX         float64
+	DirVecY         float64
 }
 
 // NewGrid creates a new grid of neurons.
-func NewBrain(width int, height int, cores int) *Brain {
+func NewBrain(width int, height int, cores int, brainPattern []byte) *Brain {
 	brainSquares := make([][]BrainSquare, width)
 	for x := 0; x < width; x++ {
 		brainSquares[x] = make([]BrainSquare, height)
 		for y := 0; y < height; y++ {
+
+			var patternPos = (x*width + y) * 4
+
+			// Its wall if its black
+			isWall := (brainPattern[patternPos+0] == 0 && brainPattern[patternPos+1] == 0 && brainPattern[patternPos+2] == 0)
+
+			var xAmount = float64((float64(brainPattern[patternPos+0] - 127.0)) / 127.0)
+			var yAmount = float64((float64(brainPattern[patternPos+1] - 127.0)) / 127.0)
+
+			var m = math.Sqrt(xAmount*xAmount + yAmount*yAmount)
+
+			//fmt.Printf("Dirvec: %v, %v \n", xAmount/m, 1.0/m)
+
 			brainSquares[x][y] = BrainSquare{
-				PosX: int(x),
-				PosY: int(y),
+				PosX:    int(x),
+				PosY:    int(y),
+				isWall:  isWall,
+				DirVecX: yAmount / m, // Not sure why these have to flip round
+				DirVecY: xAmount / m,
 			}
 		}
 	}
@@ -47,8 +66,10 @@ func (brain *Brain) AddStandardNeurons() {
 	for x := 0; x < brain.Width; x++ {
 		for y := 0; y < brain.Height; y++ {
 			var cell = &brain.BrainSquares[x][y]
-			cell.Neurons = append(cell.Neurons, NewNeuron(x, y, cell, true))
-			cell.NumberOfNeurons = len(cell.Neurons)
+			if !cell.isWall {
+				cell.Neurons = append(cell.Neurons, NewNeuron(x, y, cell, true))
+				cell.NumberOfNeurons = len(cell.Neurons)
+			}
 		}
 	}
 }
@@ -57,8 +78,10 @@ func (brain *Brain) AddNegativeNeurons() {
 	for x := 1; x < brain.Width; x += 2 {
 		for y := 1; y < brain.Height; y += 2 {
 			var cell = &brain.BrainSquares[x][y]
-			cell.Neurons = append(cell.Neurons, NewNeuron(x, y, cell, false))
-			cell.NumberOfNeurons = len(cell.Neurons)
+			if !cell.isWall {
+				cell.Neurons = append(cell.Neurons, NewNeuron(x, y, cell, false))
+				cell.NumberOfNeurons = len(cell.Neurons)
+			}
 		}
 	}
 }
@@ -78,8 +101,10 @@ func (brain *Brain) ConnectNeurons() {
 
 		for x := 0; x < brain.Width; x++ {
 			currentSquare := &brain.BrainSquares[x][y]
-			for s := 0; s < currentSquare.NumberOfNeurons; s++ {
-				currentSquare.Neurons[s].InitialConnect(brain)
+			if !currentSquare.isWall {
+				for s := 0; s < currentSquare.NumberOfNeurons; s++ {
+					currentSquare.Neurons[s].InitialConnect(brain, currentSquare)
+				}
 			}
 		}
 	}
@@ -105,11 +130,11 @@ func (brain *Brain) WrapPosition(x int, y int) (outX int, outY int) {
 func (brain *Brain) Update(time float64) {
 
 	//var num = rand.Int32()
-	var pickedNeuron = brain.BrainSquares[rand.Intn(brain.Width)][rand.Intn(brain.Height)].Neurons[0]
-
-	//fmt.Println("Threshold:", pickedNeuron.Threshold)
-	pickedNeuron.AddActivation(3, time)
-	//fmt.Println("Activation:", pickedNeuron.Activation)
+	var randomSquare = brain.BrainSquares[rand.Intn(brain.Width)][rand.Intn(brain.Height)]
+	if !randomSquare.isWall {
+		var pickedNeuron = randomSquare.Neurons[0]
+		pickedNeuron.AddActivation(3, time)
+	}
 
 	// The three lanes per thread
 	for l := 0; l < 3; l += 1 {
