@@ -1,5 +1,7 @@
 package main
 
+import "math"
+
 type Connection struct {
 	From             *Neuron
 	To               *Neuron
@@ -8,24 +10,18 @@ type Connection struct {
 	IsAwaitingReward bool
 	DebugLast        string
 
-	LongTermStrength    float64
-	LastUpdatedLongTerm float64
+	LastUpdateTime float64
 }
 
-func (con *Connection) UpdateWeightsAndLTM(time float64) {
+func (con *Connection) UpdateWeightsSince(time float64) {
 
-	var timePassed = time - con.LastUpdatedLongTerm
-
-	var deltaStrength = con.LongTermStrength - con.Strength
-
-	if timePassed > 1000 {
-		con.Strength += deltaStrength - deltaStrength/1000
-		con.LongTermStrength -= deltaStrength / 1000
-	} else {
-
-		//var ltmChange = (deltaStrength / 1000) * timePassed
-
+	if time == con.LastUpdateTime {
+		return
 	}
 
-	con.LastUpdatedLongTerm = time
+	var cyclesSince = time - con.LastUpdateTime
+
+	con.Strength *= math.Pow(0.999, cyclesSince)
+
+	con.LastUpdateTime = time
 }

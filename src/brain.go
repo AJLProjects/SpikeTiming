@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"sync"
 )
 
 // Grid holds the 2D array of neurons.
 type Brain struct {
-	Width         int
-	Height        int
-	BrainSquares  [][]BrainSquare
-	ThreadStrips  []*MultithreadStrip
-	NumberThreads int
+	Width        int
+	Height       int
+	BrainSquares [][]BrainSquare
+	// Neurons to check
+	NeuronsToCheck     []*Neuron
+	NextNeuronsToCheck []*Neuron
 }
 
 type BrainSquare struct {
@@ -27,7 +27,7 @@ type BrainSquare struct {
 }
 
 // NewGrid creates a new grid of neurons.
-func NewBrain(width int, height int, cores int, brainPattern []byte) *Brain {
+func NewBrain(width int, height int, brainPattern []byte) *Brain {
 	brainSquares := make([][]BrainSquare, width)
 	for x := 0; x < width; x++ {
 		brainSquares[x] = make([]BrainSquare, height)
@@ -55,10 +55,11 @@ func NewBrain(width int, height int, cores int, brainPattern []byte) *Brain {
 		}
 	}
 	return &Brain{
-		Width:         width,
-		Height:        height,
-		BrainSquares:  brainSquares,
-		NumberThreads: cores,
+		Width:              width,
+		Height:             height,
+		BrainSquares:       brainSquares,
+		NeuronsToCheck:     make([]*Neuron, 0),
+		NextNeuronsToCheck: make([]*Neuron, 0),
 	}
 }
 
@@ -67,7 +68,7 @@ func (brain *Brain) AddStandardNeurons() {
 		for y := 0; y < brain.Height; y++ {
 			var cell = &brain.BrainSquares[x][y]
 			if !cell.isWall {
-				cell.Neurons = append(cell.Neurons, NewNeuron(x, y, cell, true))
+				cell.Neurons = append(cell.Neurons, NewNeuron(brain, cell, true))
 				cell.NumberOfNeurons = len(cell.Neurons)
 			}
 		}
@@ -79,7 +80,7 @@ func (brain *Brain) AddNegativeNeurons() {
 		for y := 1; y < brain.Height; y += 2 {
 			var cell = &brain.BrainSquares[x][y]
 			if !cell.isWall {
-				cell.Neurons = append(cell.Neurons, NewNeuron(x, y, cell, false))
+				cell.Neurons = append(cell.Neurons, NewNeuron(brain, cell, false))
 				cell.NumberOfNeurons = len(cell.Neurons)
 			}
 		}
@@ -136,35 +137,12 @@ func (brain *Brain) Update(time float64) {
 		pickedNeuron.AddActivation(3, time)
 	}
 
-	// The three lanes per thread
-	for l := 0; l < 3; l += 1 {
-
-		var wg sync.WaitGroup
-
-		for i := 0; i < brain.NumberThreads; i += 1 {
-
-			wg.Add(1)
-
-			var stripUpdating = brain.ThreadStrips[(i*3)+l]
-			go func(_stripUpdating *MultithreadStrip) {
-				defer wg.Done()
-
-				// TODO: Might just be better to keep it sdtatic we just invert where we write to?
-				// Do a swap of the updates
-				var temp = _stripUpdating.NeuronsToCheck
-				_stripUpdating.NeuronsToCheck = _stripUpdating.NextNeuronsToCheck
-				_stripUpdating.NextNeuronsToCheck = temp[:0] // Temp but cleared
-
-				for _, neuron := range _stripUpdating.NeuronsToCheck {
-					neuron.AlreadyAddedToTocheckList = false
-					neuron.CheckForFiring(time)
-				}
-
-			}(stripUpdating)
-		}
-
-		wg.Wait()
-
+	// Swap the lists, what was queued last update gets checked now
+	var temp = brain.NeuronsToCheck
+	brain.NeuronsToCheck = brain.NextNeuronsToCheck
+	brain.NextNeuronsToCheck = temp[:0] // Temp but cleared
+	for _, neuron := range brain.NeuronsToCheck {
+		neuron.AlreadyAddedToTocheckList = false
+		neuron.CheckForFiring(time)
 	}
-
 }

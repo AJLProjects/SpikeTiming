@@ -27,3 +27,7 @@ func RewardValue(val float64, fraction float64, max float64) float64 {
 func PosOnlyRandMultiplier(size float64) float64 {
 	return 1.0 + (rand.ExpFloat64() * size)
 }
+
+func Lerp(from float64, to float64, timestep float64) float64 {
+	return from + (to-from)*timestep
+}

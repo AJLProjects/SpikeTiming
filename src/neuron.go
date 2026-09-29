@@ -5,13 +5,13 @@ import (
 	"math/rand"
 )
 
-const CONTRIBUTION_REWARD_WINDOW = 20.0
+const REFACTORY_PERIOD = 10.0
 
-const SPIKE_DURATION = 5.0
+const ACTIVATION_DECAY_RATE = 0.98
 
 // Neuron represents a single neuron in the network.
 type Neuron struct {
-	ThreadStrip  *MultithreadStrip
+	Brain        *Brain
 	ParentSquare *BrainSquare
 	Incoming     []*Connection
 	Outgoing     []*Connection
@@ -23,20 +23,24 @@ type Neuron struct {
 
 	Threshold float64
 
+	RefactoryPrediod float64
+
 	Activation     float64
 	LastUpdateTime float64
 }
 
 // NewNeuron creates and returns a new neuron.
-func NewNeuron(x, y int, parentSquare *BrainSquare, isExcitatory bool) Neuron {
+func NewNeuron(brain *Brain, parentSquare *BrainSquare, isExcitatory bool) Neuron {
 	return Neuron{
+		Brain:                     brain,
 		ParentSquare:              parentSquare,
 		Incoming:                  make([]*Connection, 0),
 		Outgoing:                  make([]*Connection, 0),
 		Activation:                rand.Float64()*0.5 + 0.5, //0.5 to 1
 		LastfireTime:              0.0,
 		LastUpdateTime:            0.0,
-		Threshold:                 1.0, // Random threshold between 0.5 and 1.0
+		Threshold:                 1.0 + ((rand.Float64() - 0.5) / 3), // Random threshold between 0.5 and 1.0
+		RefactoryPrediod:          REFACTORY_PERIOD + rand.Float64()*3,
 		IsExcitatory:              isExcitatory,
 		AlreadyAddedToTocheckList: false,
 	}
@@ -69,53 +73,63 @@ func (n *Neuron) InitialConnect(brain *Brain, brainSquare *BrainSquare) {
 
 func (n *Neuron) CheckForFiring(time float64) {
 
-	n.UpdateActivationOnly(time)
+	n.UpdateActivationAndWeightOnly(time)
 
 	// Recalculate threshold
 	var lastFireTimeDelta = time - n.LastfireTime
 	var desireToFireComp = -math.Min(lastFireTimeDelta/8000, 0.99)
-	var absoluteRefactoryPeriod = SPIKE_DURATION * 2
-	var justFiredDepolarization = math.Pow(math.Max(absoluteRefactoryPeriod-lastFireTimeDelta, 0)/absoluteRefactoryPeriod, 0.5) * 3 // Multiply the SPIKE_DURATION by 2 to get teh absolute refactory period
-	n.Threshold = 1.0 + desireToFireComp + justFiredDepolarization
+	//var absoluteRefactoryPeriod = REFACTORY_PERIOD * 2
+	//var justFiredDepolarization = math.Pow(math.Max(absoluteRefactoryPeriod-lastFireTimeDelta, 0)/absoluteRefactoryPeriod, 0.5) * 3 // Multiply the SPIKE_DURATION by 2 to get teh absolute refactory period
+	virtualThreshold := n.Threshold + desireToFireComp // + justFiredDepolarization
 
-	if n.Activation >= n.Threshold { // SUCCESSFUL FIRE!!!
+	if n.Activation >= virtualThreshold && lastFireTimeDelta > n.RefactoryPrediod { // SUCCESSFUL FIRE!!!
+
+		n.Threshold = Lerp(n.Threshold, 1.1, 0.3)
 
 		// Because the simulation is in timesteps, it can be overshot, whereas in nature, as soon at the spike occurs, it will weaken any more
 
-		var overShootThreshold = 1.5 // Need to add 0.5 because a single normal fire may overshoot naturally
-		var overshoot = math.Max(n.Activation-overShootThreshold, 0.0)
-		var overshootCorrector = math.Tanh(overshoot/2.0) * 0.3
+		//var overShootThreshold = 1.5 // Need to add 0.5 because a single normal fire may overshoot naturally
+		var overshoot = math.Max(n.Activation-1.2, 0.0)
+		hasOvershot := overshoot > 0
+		//var overshootCorrector = math.Tanh(overshoot/2.0) * 0.3
+
+		overShootWeightsTotal := 0.0
+		if hasOvershot {
+			for _, c := range n.Incoming {
+
+				if c.IsAwaitingReward {
+					var conFiredDurationAgo = time - c.From.LastfireTime
+
+					if conFiredDurationAgo <= 1.0001 {
+						if n.IsExcitatory {
+							//c.Strength *= 1.0 - (overshoot / 5.0)
+							overShootWeightsTotal += c.Strength
+						}
+					}
+				}
+			}
+		}
 
 		// Send reward or punsih to presynaptic dendrites
 		for _, c := range n.Incoming {
-			var firedDurationAgo = time - c.From.LastfireTime
-			if c.IsAwaitingReward && firedDurationAgo < CONTRIBUTION_REWARD_WINDOW {
+			c.UpdateWeightsSince(time)
+			var conFiredDurationAgo = time - c.From.LastfireTime
 
-				// The closer to the fireing time the more reward
-				var changeAmount = 0.2 + (CONTRIBUTION_REWARD_WINDOW-firedDurationAgo)/CONTRIBUTION_REWARD_WINDOW
+			if c.IsAwaitingReward {
 
-				// more reward to the connection if this neuron hasnt fired in a while
-				changeAmount += math.Pow(lastFireTimeDelta/5000, 2)
-
-				if c.IsExcitatory {
-					if overshoot > 0.001 {
-						//c.DebugLast = "Overshoot by " + fmt.Sprintf("%f", overshootMultiplier)
-						c.Strength = PunishValue(c.Strength, overshootCorrector) //TOO Punishing in certain circumstances
-					} else {
-						c.Strength = RewardValue(c.Strength, 0.07*changeAmount, 1.5)
+				if hasOvershot && conFiredDurationAgo <= 1.0001 {
+					if n.IsExcitatory {
+						relativeConnectionRatio := c.Strength / overShootWeightsTotal
+						c.Strength *= 1.0 - (relativeConnectionRatio * (overshoot / 2.0))
 					}
-				} else { // Negative
-					//c.DebugLast = "Negative, postsynaptic fired"
-					c.Strength = PunishValue(c.Strength, 0.04*changeAmount)
+				} else {
+
+					contribution := math.Pow(ACTIVATION_DECAY_RATE, conFiredDurationAgo)
+					c.Strength = RewardValue(c.Strength, 0.07*contribution, 1.5)
 				}
 
-			} else { // Punish the connection because it wasn't involved in the cause of its firing
-				if c.IsExcitatory {
-					//c.DebugLast = "Wasnt involved in firing"
-					c.Strength = PunishValue(c.Strength, 0.005*c.Strength)
-				}
+				c.IsAwaitingReward = false
 			}
-			c.IsAwaitingReward = false
 		}
 
 		// Send signal to postsynaptic neurons
@@ -123,47 +137,40 @@ func (n *Neuron) CheckForFiring(time float64) {
 		n.Activation = 0
 		for _, c := range n.Outgoing {
 
+			c.UpdateWeightsSince(time)
+			c.To.UpdateActivationAndWeightOnly(time)
+
+			inRefatoryPeriod := time-c.To.LastfireTime < REFACTORY_PERIOD
+
 			if c.IsExcitatory {
 
-				c.To.UpdateActivationOnly(time)
-
-				if time-c.To.LastfireTime < SPIKE_DURATION { // If it has fired into a already spiked cell, weaken
-					c.IsAwaitingReward = false
-					//c.DebugLast = "Fired into spike"
+				if inRefatoryPeriod { // If it has fired into a already spiked cell, weaken
 					c.Strength = PunishValue(c.Strength, 0.03)
-				} else { // Normal firing, punish up front for rewward later
+
+				} else { // Normal firing
+
 					c.To.Activation += c.Strength // * PosOnlyRandMultiplier(c.Strength*0.001) // We could add a magnitude multiplyer to the cell, default to 0.15 to allow the growth to always be between 0 and 1
 					c.IsAwaitingReward = true
-					//c.DebugLast = "Normal firing"
-					c.Strength = PunishValue(c.Strength, 0.008)
 				}
 
 				// Because we have added activation to the next neuron we will check if it has fired
 				if !c.To.AlreadyAddedToTocheckList {
 					c.To.AlreadyAddedToTocheckList = true
-					c.To.ThreadStrip.NextNeuronsToCheck = append(c.To.ThreadStrip.NextNeuronsToCheck, c.To)
+					c.To.Brain.NextNeuronsToCheck = append(c.To.Brain.NextNeuronsToCheck, c.To)
 				}
 
 			} else { // negative neuron outgoing
 
-				c.To.UpdateActivationOnly(time)
-
-				// We want reward if its firing into a neuron with much activation, and punish if it fires into a inactive neuron, proportionally
-				var existingActivation = c.To.Activation
-				var reward = existingActivation - 0.4 // Only reward if the activation is above 0.4
-
-				c.To.Activation -= c.Strength
-
-				if reward > 0 {
-					c.IsAwaitingReward = true
-					c.Strength = RewardValue(c.Strength, reward*0.1, 1.5) // Should only reward based on the amount of activation there
-				} else { // Reward is always negative here
-					//c.DebugLast = "Punish negative for firing onto no activation"
-					c.Strength = PunishValue(c.Strength, -reward*0.05*c.Strength)
+				if !inRefatoryPeriod {
+					c.To.Activation -= c.Strength
 				}
 			}
+
+			c.Strength *= 0.999 //Tiny amount of punish to stop rapid firing
 		}
-	} else if n.Activation > n.Threshold*0.8 { // Nearly fired
+	}
+
+	/*else if n.Activation > n.Threshold*0.8 { // Nearly fired
 		// This block is for NMDA
 		// Go through the connections and see who recently fired, very slighly reward with more weight
 
@@ -177,14 +184,14 @@ func (n *Neuron) CheckForFiring(time float64) {
 				if c.IsExcitatory {
 					c.Strength = RewardValue(c.Strength, 0.3*rewardAmount*timingReward, 1.5) // This needs to be belenced with the amount of upfront punish
 				} else { // Want to punish negative neurons because they dont like activation, this effect should be even more mild because
-					c.Strength = PunishValue(c.Strength, 0.1*rewardAmount*timingReward) // This needs to be belenced with the amount of upfront punish
+					//c.Strength = PunishValue(c.Strength, 0.1*rewardAmount*timingReward) // This needs to be belenced with the amount of upfront punish
 				}
 			}
 		}
-	}
+	}*/
 }
 
-func (n *Neuron) UpdateActivationOnly(time float64) {
+func (n *Neuron) UpdateActivationAndWeightOnly(time float64) {
 
 	if time == n.LastUpdateTime {
 		return
@@ -192,13 +199,15 @@ func (n *Neuron) UpdateActivationOnly(time float64) {
 
 	var cyclesSince = time - n.LastUpdateTime
 
-	n.Activation = n.Activation * math.Pow(0.98, cyclesSince)
+	n.Activation *= math.Pow(ACTIVATION_DECAY_RATE, cyclesSince)
+
+	n.Threshold *= math.Pow(0.99, cyclesSince)
 
 	n.LastUpdateTime = time
 }
 
 func (n *Neuron) AddActivation(amount float64, time float64) {
-	n.UpdateActivationOnly(time)
+	n.UpdateActivationAndWeightOnly(time)
 	n.Activation += amount
 	if n.Activation < 0 {
 		n.Activation = 0
@@ -211,7 +220,7 @@ func connectExcitatory(brain *Brain, brainSquare *BrainSquare, n *Neuron) {
 	var sourceX = n.ParentSquare.PosX
 	var sourceY = n.ParentSquare.PosY
 
-	var radiusI = 5
+	var radiusI = 8
 	var radiusF = float64(radiusI)
 
 	var numberOutgoing = 0
@@ -225,7 +234,7 @@ func connectExcitatory(brain *Brain, brainSquare *BrainSquare, n *Neuron) {
 
 			var dist = math.Sqrt(math.Pow(float64(x), 2) + math.Pow(float64(y), 2))
 
-			if dist > radiusF {
+			if dist > radiusF || rand.Float32() > 0.4 {
 				continue
 			}
 
