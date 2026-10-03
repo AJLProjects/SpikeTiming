@@ -10,17 +10,13 @@ var REFACTORY_PERIOD = 5.0
 
 var ACTIVATION_DECAY_RATE = 0.98
 
-// Homeostasis: each neuron tracks its own firing rate and nudges its threshold to keep that rate near a target
-var TARGET_FIRING_RATE = 0.005       // Spikes per cycle (1 spike every 200 cycles)
-var FIRING_RATE_WINDOW = 1000.0      // Time constant of the firing rate average, in cycles
-var HOMEOSTASIS_LEARNING_RATE = 0.05 // At double the target rate, the offset rises ~0.25 per 1000 cycles
-var HOMEOSTASIS_OFFSET_MIN = -0.5
-var HOMEOSTASIS_OFFSET_MAX = 3.0
-
-// Neighbour synchrony: when a neuron fires, it averages the time since its 8 surrounding neurons fired
-// The closer that average is to 0, the more its contributing inputs are punished, to force neighbours to differentiate
-var NEIGHBOUR_FIRE_WINDOW = 5.0 // Time constant in cycles, an average of this many cycles gives ~0.37 of the full punish
-var NEIGHBOUR_SYNC_PUNISH = 0.1 // Fraction of strength removed when the average time since neighbours fired is 0
+// Neighbour synchrony: when a neuron fires, it counts how many of its 8 surrounding neurons fired recently
+// Each neighbour counts as exp(-timeSinceFired / NEIGHBOUR_FIRE_WINDOW), so the count is continuous rather than a hard cutoff
+// Firing alone rewards its contributing inputs, firing with ~2*NEIGHBOUR_SYNC_CROSSOVER neighbours fully punishes them, to force neighbours to differentiate
+var NEIGHBOUR_FIRE_WINDOW = 3.0       // Time constant in cycles, a neighbour that fired this many cycles ago counts as ~0.37 of a neighbour
+var NEIGHBOUR_SYNC_RATE = 0.5         // Lerp amount at full reward (0 neighbours) or full punish (2*crossover neighbours)
+var NEIGHBOUR_SYNC_CROSSOVER = 1.5    // Number of recently fired neighbours where it switches from reward to punish
+var NEIGHBOUR_SYNC_MAX_STRENGTH = 1.5 // Strength that a reward lerps towards, a punish lerps towards 0
 
 // Quiet neuron bonus: the longer a neuron has gone without firing, the more its contributing inputs are rewarded when it finally fires
 // Accumulates linearly as 1 + QUIET_REWARD_PER_CYCLE * cycles of silence, so a long silent neuron can be recruited back into the network
@@ -51,9 +47,6 @@ type Neuron struct {
 
 	Activation     float64
 	LastUpdateTime float64
-
-	FiringRate        float64 // Running average of spikes per cycle
-	HomeostaticOffset float64 // Added to the threshold, rises if firing too much, falls if too little
 }
 
 // NewNeuron creates and returns a new neuron.
@@ -70,8 +63,6 @@ func NewNeuron(brain *Brain, parentSquare *BrainSquare, isExcitatory bool) Neuro
 		RefactoryJitter:           rand.Float64() * 3,
 		IsExcitatory:              isExcitatory,
 		AlreadyAddedToTocheckList: false,
-		FiringRate:                TARGET_FIRING_RATE, // Start at target so there is no startup transient
-		HomeostaticOffset:         0.0,
 	}
 
 }
@@ -111,10 +102,10 @@ func (n *Neuron) CheckForFiring(time float64) {
 
 	// Recalculate threshold
 	var lastFireTimeDelta = time - n.LastfireTime
-	var desireToFireComp = -math.Min(lastFireTimeDelta/8000, 0.8)
+	var desireToFireComp = -lastFireTimeDelta / 8000 //math.Min(lastFireTimeDelta/8000, 0.8)
 	//var absoluteRefactoryPeriod = REFACTORY_PERIOD * 2
 	//var justFiredDepolarization = math.Pow(math.Max(absoluteRefactoryPeriod-lastFireTimeDelta, 0)/absoluteRefactoryPeriod, 0.5) * 3 // Multiply the SPIKE_DURATION by 2 to get teh absolute refactory period
-	virtualThreshold := n.Threshold + desireToFireComp + n.HomeostaticOffset // + justFiredDepolarization
+	virtualThreshold := n.Threshold + desireToFireComp // + justFiredDepolarization
 
 	if n.Activation >= virtualThreshold && lastFireTimeDelta > n.RefactoryPeriod() { // SUCCESSFUL FIRE!!!
 
@@ -144,14 +135,17 @@ func (n *Neuron) CheckForFiring(time float64) {
 			}
 		}
 
-		// Punish scales down exponentially with the neighbours' average time since firing
-		// Neighbours that fired closer in time give a higher punish, further away gives a lower punish
-		//   avg 0 cycles  -> 0.3    (full NEIGHBOUR_SYNC_PUNISH)
-		//   avg 1 cycle   -> ~0.21  (72% of full)
-		//   avg 3 cycles  -> ~0.11  (37% of full)
-		//   avg 6 cycles  -> ~0.041 (14% of full)
-		//   avg 10 cycles -> ~0.011 (4% of full, effectively none)
-		neighbourSyncPunish := math.Pow(n.AverageNeighbourTimeSinceFired(time)/NEIGHBOUR_FIRE_WINDOW, 1.8) * NEIGHBOUR_SYNC_PUNISH
+		// Signed sync amount from the soft count of recently fired neighbours, +1 is full reward, -1 is full punish
+		// With the default crossover of 1.5:
+		//   0 neighbours   -> +1   (fired alone, full reward)
+		//   1 neighbour    -> +0.33
+		//   1.5 neighbours -> 0    (neutral)
+		//   2 neighbours   -> -0.33
+		//   3+ neighbours  -> -1   (full punish)
+		neighbourSync := 1.0 - n.RecentlyFiredNeighbourCount(time)/NEIGHBOUR_SYNC_CROSSOVER
+		neighbourSync = math.Max(-1.0, math.Min(1.0, neighbourSync))
+
+		neighbourSyncAmount := math.Abs(neighbourSync) * NEIGHBOUR_SYNC_RATE
 
 		// Reward multiplier for how long this neuron was silent, LastfireTime hasn't been reset yet so lastFireTimeDelta is the silence
 		quietRewardBonus := 1.0 + QUIET_REWARD_PER_CYCLE*lastFireTimeDelta
@@ -179,8 +173,8 @@ func (n *Neuron) CheckForFiring(time float64) {
 					}
 				}
 
-				// Punish inputs that drove this neuron to fire at the same time as its neighbours
-				c.Strength = PunishValue(c.Strength, neighbourSyncPunish)
+				// Reward inputs that drove this neuron to fire alone, punish ones that drove it to fire with its neighbours
+				c.Strength = math.Max(Lerp(c.Strength, NEIGHBOUR_SYNC_MAX_STRENGTH, neighbourSyncAmount), 0.00001)
 
 				c.IsAwaitingReward = false
 			}
@@ -189,7 +183,6 @@ func (n *Neuron) CheckForFiring(time float64) {
 		// Send signal to postsynaptic neurons
 		n.LastfireTime = time
 		n.Activation = 0
-		n.FiringRate += 1.0 / FIRING_RATE_WINDOW
 		for _, c := range n.Outgoing {
 
 			c.UpdateWeightsSince(time)
@@ -203,9 +196,9 @@ func (n *Neuron) CheckForFiring(time float64) {
 
 				if inRefatoryPeriod { // If it has fired into a already spiked cell, weaken
 
-					rat := 1 - timeSinceLastFire/c.To.RefactoryPeriod()
+					//rat := 1 - timeSinceLastFire/c.To.RefactoryPeriod()
 
-					c.Strength = PunishValue(c.Strength, 0.05*rat)
+					c.Strength = PunishValue(c.Strength, 0.05) // 0.05*rat
 
 				} else { // Normal firing
 
@@ -251,14 +244,14 @@ func (n *Neuron) CheckForFiring(time float64) {
 	}*/
 }
 
-// AverageNeighbourTimeSinceFired averages the cycles since the neurons in the 8 surrounding squares last fired
-func (n *Neuron) AverageNeighbourTimeSinceFired(time float64) float64 {
+// RecentlyFiredNeighbourCount is a soft count of the neurons in the 8 surrounding squares that fired recently
+// Each neighbour adds exp(-timeSinceFired / NEIGHBOUR_FIRE_WINDOW), so firing right now counts as 1 and it fades away over time
+func (n *Neuron) RecentlyFiredNeighbourCount(time float64) float64 {
 
 	var sourceX = n.ParentSquare.PosX
 	var sourceY = n.ParentSquare.PosY
 
-	total := 0.0
-	count := 0
+	count := 0.0
 
 	for y := -1; y <= 1; y++ {
 		for x := -1; x <= 1; x++ {
@@ -275,16 +268,11 @@ func (n *Neuron) AverageNeighbourTimeSinceFired(time float64) float64 {
 			}
 
 			neighbour := &square.Neurons[0] // The excitatory neuron
-			total += time - neighbour.LastfireTime
-			count++
+			count += math.Exp(-(time - neighbour.LastfireTime) / NEIGHBOUR_FIRE_WINDOW)
 		}
 	}
 
-	if count == 0 {
-		return math.Inf(1) // No neighbours, so no punish
-	}
-
-	return total / float64(count-2)
+	return count
 }
 
 func (n *Neuron) UpdateActivationAndWeightOnly(time float64) {
@@ -298,15 +286,6 @@ func (n *Neuron) UpdateActivationAndWeightOnly(time float64) {
 	n.Activation *= math.Pow(ACTIVATION_DECAY_RATE, cyclesSince)
 
 	n.Threshold *= math.Pow(0.99, cyclesSince)
-
-	// Homeostasis, integrated exactly over the gap since the last update since neurons are only updated when touched
-	// The firing rate decays exponentially, so its integral over the gap is rate * window * (1 - decay)
-	var rateDecay = math.Exp(-cyclesSince / FIRING_RATE_WINDOW)
-	var integratedRate = n.FiringRate * FIRING_RATE_WINDOW * (1.0 - rateDecay)
-	var rateError = integratedRate - TARGET_FIRING_RATE*cyclesSince // Positive when firing too much
-	n.HomeostaticOffset += HOMEOSTASIS_LEARNING_RATE * rateError
-	n.HomeostaticOffset = math.Max(HOMEOSTASIS_OFFSET_MIN, math.Min(HOMEOSTASIS_OFFSET_MAX, n.HomeostaticOffset))
-	n.FiringRate *= rateDecay
 
 	n.LastUpdateTime = time
 }
