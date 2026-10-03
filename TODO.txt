@@ -1,7 +1,13 @@
 
+- Separate panel for sliders?
+
+- Increase numbers?
+
+- Stop using 'punish' and just lerp?
 
 
-
+Can you add a distance value to the dendrites, this will make it harder to climb to higher weights. It will still be able to achive the same weights, just harder to get to the further away
+This could be done as a distance multiplier. The further away the higher.
 
 
 - Lower the refactory time for entry nodes

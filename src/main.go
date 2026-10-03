@@ -144,8 +144,9 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 
-	// 10 updates per frame
-	for i := 0; i <= 5; i++ {
+	// x updates per frame
+	updatesPerFrame := 1
+	for i := 0; i <= updatesPerFrame; i++ {
 		g.brain.Update(g.time)
 		g.time += 1.0
 	}
