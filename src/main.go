@@ -94,13 +94,18 @@ type Game struct {
 	camX   int
 	camY   int
 	zoom   int
+
+	brainImage *ebiten.Image // The brain is drawn here first, then onto the screen left of the slider panel
+	panel      *SliderPanel
 }
 
 func (g *Game) Update() error {
 
+	g.panel.Update()
+
 	cursorX, cursorY := ebiten.CursorPosition()
 
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) && !g.panel.Contains(cursorX, cursorY) {
 		g.mouseX = cursorX
 		g.mouseY = cursorY
 	}
@@ -155,11 +160,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	DrawCursor(g.brain, g.pixels, g.mouseX, g.mouseY)
 
-	screen.WritePixels(g.pixels)
+	g.brainImage.WritePixels(g.pixels)
+	screen.DrawImage(g.brainImage, nil)
+
+	g.panel.Draw(screen)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return outsideWidth, outsideHeight
+	return screenWidth + panelWidth, screenHeight
 }
 
 func imageToRGBA(img image.Image) []uint8 {
@@ -202,9 +210,12 @@ func main() {
 		camX:   0,
 		camY:   0,
 		zoom:   1,
+
+		brainImage: ebiten.NewImage(screenWidth, screenHeight),
+		panel:      NewSliderPanel(screenWidth),
 	}
 
-	ebiten.SetWindowSize(screenWidth, screenHeight)
+	ebiten.SetWindowSize(screenWidth+panelWidth, screenHeight)
 	ebiten.SetWindowTitle("Game of Life (Ebitengine Demo)")
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)

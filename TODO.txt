@@ -1,4 +1,12 @@
 
+
+GOAL
+- Multilayerd firing 
+- More sparse
+- Homeostatic
+- Things don't vanish to infinity and never fire. Again homeostatis prevents this.
+
+
 - Separate panel for sliders?
 
 - Increase numbers?

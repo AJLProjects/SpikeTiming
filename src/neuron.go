@@ -5,34 +5,33 @@ import (
 	"math/rand"
 )
 
-const REFACTORY_PERIOD = 5.0
+// These are vars rather than consts so the slider panel (ui.go) can change them while the simulation runs
+var REFACTORY_PERIOD = 5.0
 
-const ACTIVATION_DECAY_RATE = 0.98
+var ACTIVATION_DECAY_RATE = 0.98
 
 // Homeostasis: each neuron tracks its own firing rate and nudges its threshold to keep that rate near a target
-const TARGET_FIRING_RATE = 0.005       // Spikes per cycle (1 spike every 200 cycles)
-const FIRING_RATE_WINDOW = 1000.0      // Time constant of the firing rate average, in cycles
-const HOMEOSTASIS_LEARNING_RATE = 0.05 // At double the target rate, the offset rises ~0.25 per 1000 cycles
-const HOMEOSTASIS_OFFSET_MIN = -0.5
-const HOMEOSTASIS_OFFSET_MAX = 3.0
+var TARGET_FIRING_RATE = 0.005       // Spikes per cycle (1 spike every 200 cycles)
+var FIRING_RATE_WINDOW = 1000.0      // Time constant of the firing rate average, in cycles
+var HOMEOSTASIS_LEARNING_RATE = 0.05 // At double the target rate, the offset rises ~0.25 per 1000 cycles
+var HOMEOSTASIS_OFFSET_MIN = -0.5
+var HOMEOSTASIS_OFFSET_MAX = 3.0
 
 // Neighbour synchrony: when a neuron fires, it averages the time since its 8 surrounding neurons fired
 // The closer that average is to 0, the more its contributing inputs are punished, to force neighbours to differentiate
-const NEIGHBOUR_FIRE_WINDOW = 5.0 // Time constant in cycles, an average of this many cycles gives ~0.37 of the full punish
-const NEIGHBOUR_SYNC_PUNISH = 0.1 // Fraction of strength removed when the average time since neighbours fired is 0
+var NEIGHBOUR_FIRE_WINDOW = 5.0 // Time constant in cycles, an average of this many cycles gives ~0.37 of the full punish
+var NEIGHBOUR_SYNC_PUNISH = 0.1 // Fraction of strength removed when the average time since neighbours fired is 0
 
 // Quiet neuron bonus: the longer a neuron has gone without firing, the more its contributing inputs are rewarded when it finally fires
-// Saturates towards 1 + QUIET_REWARD_MAX_BONUS, so a long silent neuron can be recruited back into the network
+// Accumulates linearly as 1 + QUIET_REWARD_PER_CYCLE * cycles of silence, so a long silent neuron can be recruited back into the network
 //
-//	200 cycles   -> x1.18
-//	1000 cycles  -> x1.79
-//	3000 cycles  -> x2.55
-//	10000+ cycles -> ~x3.0
-const QUIET_REWARD_MAX_BONUS = 3.0   // Extra reward multiplier reached after a very long silence
-const QUIET_REWARD_TIMESCALE = 500.0 // Cycles of silence to reach ~63% of the max bonus
+//	200 cycles   -> x1.2
+//	1000 cycles  -> x2.0
+//	3000 cycles  -> x4.0
+var QUIET_REWARD_PER_CYCLE = 0.001 // Extra reward multiplier added for each cycle the neuron has gone without firing
 
 // When there is a presynaptic fire then a postsynaptic fire with meaningful contribution, then it will reward the connection endrite this amount
-const POST_SYNAPTIC_FIRE_REWARD = 0.1
+var POST_SYNAPTIC_FIRE_REWARD = 0.1
 
 // Neuron represents a single neuron in the network.
 type Neuron struct {
@@ -48,7 +47,7 @@ type Neuron struct {
 
 	Threshold float64
 
-	RefactoryPrediod float64
+	RefactoryJitter float64 // Per neuron random extra on top of REFACTORY_PERIOD
 
 	Activation     float64
 	LastUpdateTime float64
@@ -68,13 +67,18 @@ func NewNeuron(brain *Brain, parentSquare *BrainSquare, isExcitatory bool) Neuro
 		LastfireTime:              0.0,
 		LastUpdateTime:            0.0,
 		Threshold:                 1.0 + ((rand.Float64() - 0.5) / 3), // Random threshold between 0.5 and 1.0
-		RefactoryPrediod:          REFACTORY_PERIOD + rand.Float64()*3,
+		RefactoryJitter:           rand.Float64() * 3,
 		IsExcitatory:              isExcitatory,
 		AlreadyAddedToTocheckList: false,
 		FiringRate:                TARGET_FIRING_RATE, // Start at target so there is no startup transient
 		HomeostaticOffset:         0.0,
 	}
 
+}
+
+// RefactoryPeriod is computed live so the REFACTORY_PERIOD slider affects existing neurons
+func (n *Neuron) RefactoryPeriod() float64 {
+	return REFACTORY_PERIOD + n.RefactoryJitter
 }
 
 // AddIncomingConnection adds a neuron that sends signals *to* this neuron.
@@ -112,7 +116,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 	//var justFiredDepolarization = math.Pow(math.Max(absoluteRefactoryPeriod-lastFireTimeDelta, 0)/absoluteRefactoryPeriod, 0.5) * 3 // Multiply the SPIKE_DURATION by 2 to get teh absolute refactory period
 	virtualThreshold := n.Threshold + desireToFireComp + n.HomeostaticOffset // + justFiredDepolarization
 
-	if n.Activation >= virtualThreshold && lastFireTimeDelta > n.RefactoryPrediod { // SUCCESSFUL FIRE!!!
+	if n.Activation >= virtualThreshold && lastFireTimeDelta > n.RefactoryPeriod() { // SUCCESSFUL FIRE!!!
 
 		n.Threshold = Lerp(n.Threshold, 1.1, 0.3)
 
@@ -150,7 +154,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 		neighbourSyncPunish := math.Pow(n.AverageNeighbourTimeSinceFired(time)/NEIGHBOUR_FIRE_WINDOW, 1.8) * NEIGHBOUR_SYNC_PUNISH
 
 		// Reward multiplier for how long this neuron was silent, LastfireTime hasn't been reset yet so lastFireTimeDelta is the silence
-		quietRewardBonus := 1.0 + QUIET_REWARD_MAX_BONUS*(1.0-math.Exp(-lastFireTimeDelta/QUIET_REWARD_TIMESCALE))
+		quietRewardBonus := 1.0 + QUIET_REWARD_PER_CYCLE*lastFireTimeDelta
 
 		// Send reward or punsih to presynaptic dendrites
 		for _, c := range n.Incoming {
@@ -193,13 +197,13 @@ func (n *Neuron) CheckForFiring(time float64) {
 
 			timeSinceLastFire := time - c.To.LastfireTime
 
-			inRefatoryPeriod := timeSinceLastFire < c.To.RefactoryPrediod
+			inRefatoryPeriod := timeSinceLastFire < c.To.RefactoryPeriod()
 
 			if c.IsExcitatory {
 
 				if inRefatoryPeriod { // If it has fired into a already spiked cell, weaken
 
-					rat := 1 - timeSinceLastFire/c.To.RefactoryPrediod
+					rat := 1 - timeSinceLastFire/c.To.RefactoryPeriod()
 
 					c.Strength = PunishValue(c.Strength, 0.05*rat)
 
