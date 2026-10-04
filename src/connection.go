@@ -12,11 +12,15 @@ const BASE_STRENGTH_FALLOFF = 8.0    // Base strength drops by ~63% every this m
 const STRENGTH_RELAX_RATE = 0.001    // Fraction of the gap to the base closed per cycle at distance 0
 const STRENGTH_RELAX_DIST_MULT = 1.0 // How much faster far connections relax, relax rate is multiplied by 1 + dist/FALLOFF * this
 
+const TO_LONG_TERM_RATE = 0.0001 // Per cycle lerp of the long term strength towards the strength (slow)
+const FROM_LONG_TERM_RATE = 0.01 // Per cycle lerp of the strength towards the long term strength (fast)
+
 type Connection struct {
 	From             *Neuron
 	To               *Neuron
 	IsExcitatory     bool
 	Strength         float64
+	LongTermStrength float64 // Slowly follows the strength, and the strength is pulled back towards it
 	BaseStrength     float64 // Value the strength relaxes towards when not being rewarded or punished
 	RelaxDecay       float64 // Per cycle multiplier applied to the gap between the strength and the base
 	IsAwaitingReward bool
@@ -41,6 +45,11 @@ func (con *Connection) UpdateWeightsSince(time float64) {
 
 	// Exponentially relax towards the base, above the base it decays down, below it recovers up
 	con.Strength = con.BaseStrength + (con.Strength-con.BaseStrength)*math.Pow(con.RelaxDecay, cyclesSince)
+
+	// Strength and long term strength lerp into each other, the long term one moves much slower
+	strength, longTerm := con.Strength, con.LongTermStrength
+	con.Strength = Lerp(strength, longTerm, math.Min(FROM_LONG_TERM_RATE*cyclesSince, 1.0))
+	con.LongTermStrength = Lerp(longTerm, strength, math.Min(TO_LONG_TERM_RATE*cyclesSince, 1.0))
 
 	con.LastUpdateTime = time
 }

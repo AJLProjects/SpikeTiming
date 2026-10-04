@@ -69,6 +69,7 @@ func NewSliderPanel(x int) *SliderPanel {
 		active: -1,
 		Sliders: []*Slider{
 			slider("Refactory period", &REFACTORY_PERIOD, 0, 30, false),
+			slider("Refactory peak fraction", &REFACTORY_PEAK_FRACTION, 0, 1, false),
 			slider("Activation decay rate", &ACTIVATION_DECAY_RATE, 0.8, 0.999, false),
 			slider("Neighbour punish/reward fire window", &NEIGHBOUR_FIRE_WINDOW, 0.5, 50, true),
 			slider("Neighbour sync rate", &NEIGHBOUR_SYNC_RATE, 0, 0.5, false),

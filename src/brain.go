@@ -134,7 +134,7 @@ func (brain *Brain) Update(time float64) {
 	var randomSquare = brain.BrainSquares[rand.Intn(brain.Width)][rand.Intn(brain.Height)]
 	if !randomSquare.isWall {
 		var pickedNeuron = randomSquare.Neurons[0]
-		pickedNeuron.AddActivation(3, time)
+		pickedNeuron.AddActivationInput(3, time)
 	}
 
 	// Swap the lists, what was queued last update gets checked now

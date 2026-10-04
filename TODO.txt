@@ -7,11 +7,10 @@ GOAL
 - Things don't vanish to infinity and never fire. Again homeostatis prevents this.
 
 
-- Separate panel for sliders?
+- Ball and chain
 
-- Increase numbers?
 
-- Stop using 'punish' and just lerp?
+
 
 
 Can you add a distance value to the dendrites, this will make it harder to climb to higher weights. It will still be able to achive the same weights, just harder to get to the further away
