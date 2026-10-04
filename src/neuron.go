@@ -40,7 +40,7 @@ var FIRE_STRENGTH_DECAY = 0.999
 // Each neighbour counts as exp(-timeSinceFired / NEIGHBOUR_FIRE_WINDOW), so the count is continuous rather than a hard cutoff
 // Firing alone rewards its contributing inputs, firing with ~2*NEIGHBOUR_SYNC_CROSSOVER neighbours fully punishes them, to force neighbours to differentiate
 var NEIGHBOUR_FIRE_WINDOW = 4.0    // Time constant in cycles, a neighbour that fired this many cycles ago counts as ~0.37 of a neighbour
-var NEIGHBOUR_SYNC_RATE = 0.4      // Lerp amount at full reward (0 neighbours) or full punish (2*crossover neighbours)
+var NEIGHBOUR_SYNC_RATE = 0.8      // Lerp amount at full reward (0 neighbours) or full punish (2*crossover neighbours)
 var NEIGHBOUR_SYNC_CROSSOVER = 1.5 // Number of recently fired neighbours where it switches from reward to punish
 
 // Quiet neuron bonus: the longer a neuron has gone without firing, the more its contributing inputs are rewarded when it finally fires
@@ -53,6 +53,10 @@ var QUIET_REWARD_PER_CYCLE = 0.001 // Extra reward multiplier added for each cyc
 
 // When there is a presynaptic fire then a postsynaptic fire with meaningful contribution, then it will reward the connection endrite this amount
 var POST_SYNAPTIC_FIRE_REWARD = 0.1
+
+// The contribution (0 to 1) is raised to this power before setting the ideal strength
+// 1 is linear, above 1 favours the inputs that fired just before, below 1 spreads the reward more evenly across older inputs
+var REWARD_NONLINEARITY = 1.0
 
 var MINIMIM_CONNECTION_STRENGTH = 0.00001 // Connections are pruned if they fall below this strength, so they don't linger forever
 
@@ -192,7 +196,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 				// Rewards both excitory and inhoibotory neurons
 				contribution := activationDecayPow.Pow(ACTIVATION_DECAY_RATE, conFiredDurationAgo)
 
-				idealStrength := contribution * quietRewardBonus
+				idealStrength := math.Pow(contribution, REWARD_NONLINEARITY) * quietRewardBonus
 				// Step towards the ideal by a fixed amount plus a fraction of the gap, capped so it never overshoots the ideal
 				delta := idealStrength - strength
 				step := math.Min(math.Abs(delta), POST_SYNAPTIC_FIRE_REWARD*math.Abs(delta)+POST_SYNAPTIC_FIRE_REWARD)

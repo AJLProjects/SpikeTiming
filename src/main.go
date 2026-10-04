@@ -196,7 +196,7 @@ func (g *Game) stepSimulation() {
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return screenWidth + panelWidth, screenHeight
+	return screenWidth + g.panel.Width, screenHeight
 }
 
 func imageToRGBA(img image.Image) []uint8 {
@@ -261,10 +261,16 @@ func main() {
 
 	// Don't make the window bigger than the monitor, leaving room for the title bar and taskbar
 	monitorWidth, monitorHeight := ebiten.Monitor().Size()
-	if monitorWidth > 0 && monitorHeight > 0 {
-		screenWidth = min(screenWidth, monitorWidth-panelWidth)
+	if monitorHeight > 0 {
 		screenHeight = min(screenHeight, monitorHeight-100)
 	}
+
+	// The panel's width depends on how many slider columns fit at this height, so the width is clamped after it's made
+	panel := NewSliderPanel(screenHeight)
+	if monitorWidth > 0 {
+		screenWidth = min(screenWidth, monitorWidth-panel.Width)
+	}
+	panel.X = screenWidth
 
 	// Started after setup so the profile only covers the running simulation
 	if *cpuProfilePath != "" {
@@ -279,10 +285,10 @@ func main() {
 		zoom:   START_ZOOM,
 
 		brainImage: ebiten.NewImage(screenWidth, screenHeight),
-		panel:      NewSliderPanel(screenWidth),
+		panel:      panel,
 	}
 
-	ebiten.SetWindowSize(screenWidth+panelWidth, screenHeight)
+	ebiten.SetWindowSize(screenWidth+panel.Width, screenHeight)
 	ebiten.SetWindowTitle("Game of Life (Ebitengine Demo)")
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)

@@ -11,7 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
-const panelWidth = 300
+const sliderColumnWidth = 300
 const panelPadding = 12
 const sliderTop = 40
 const sliderRowHeight = 46
@@ -52,30 +52,34 @@ func (s *Slider) setFraction(f float64) {
 }
 
 // SliderPanel is drawn to the right of the brain view, starting at X
+// Sliders fill a column top to bottom, then overflow into another column to its right
 type SliderPanel struct {
-	X       int
-	Sliders []*Slider
-	active  int // Index of the slider being dragged, -1 when none
+	X             int
+	Width         int // Grows by sliderColumnWidth for each column needed
+	Sliders       []*Slider
+	rowsPerColumn int
+	active        int // Index of the slider being dragged, -1 when none
 }
 
-func NewSliderPanel(x int) *SliderPanel {
+// NewSliderPanel lays the sliders out to fit the given height, X is set by the caller once the brain view width is known
+func NewSliderPanel(height int) *SliderPanel {
 
 	slider := func(label string, value *float64, min float64, max float64, logScale bool) *Slider {
 		return &Slider{Label: label, Value: value, Min: min, Max: max, Default: *value, LogScale: logScale}
 	}
 
-	return &SliderPanel{
-		X:      x,
+	p := &SliderPanel{
 		active: -1,
 		Sliders: []*Slider{
 			slider("Refactory period", &REFACTORY_PERIOD, 0, 30, false),
 			slider("Refactory peak fraction", &REFACTORY_PEAK_FRACTION, 0, 1, false),
 			slider("Activation decay rate", &ACTIVATION_DECAY_RATE, 0.8, 0.999, false),
 			slider("Neighbour punish/reward fire window", &NEIGHBOUR_FIRE_WINDOW, 0.5, 50, true),
-			slider("Neighbour sync rate", &NEIGHBOUR_SYNC_RATE, 0, 1, false),
+			slider("Neighbour fire punish/reward rate", &NEIGHBOUR_SYNC_RATE, 0, 1, false),
 			slider("Neighbour sync crossover from good to bad", &NEIGHBOUR_SYNC_CROSSOVER, 0.25, 8, false),
 			slider("Quiet reward per cycle", &QUIET_REWARD_PER_CYCLE, 0.00001, 0.05, true),
 			slider("Post synaptic fire reward", &POST_SYNAPTIC_FIRE_REWARD, 0, 0.5, false),
+			slider("Reward nonlinearity (contribution power)", &REWARD_NONLINEARITY, 0.1, 10, true),
 			slider("Threshold decay rate", &THRESHOLD_DECAY_RATE, 0.9, 0.9999, false),
 			slider("Desire to fire (cycles per -1 threshold)", &DESIRE_TO_FIRE_CYCLES, 100, 100000, true),
 			slider("Threshold reset target after fire", &THRESHOLD_RESET_TARGET, 0.2, 3, false),
@@ -87,20 +91,35 @@ func NewSliderPanel(x int) *SliderPanel {
 			slider("Minimum connection strength", &MINIMIM_CONNECTION_STRENGTH, 0.0000001, 0.01, true),
 		},
 	}
+
+	p.rowsPerColumn = max(1, (height-sliderTop)/sliderRowHeight)
+	columns := (len(p.Sliders) + p.rowsPerColumn - 1) / p.rowsPerColumn
+	p.Width = columns * sliderColumnWidth
+	return p
+}
+
+// labelPos is the top left of slider i's label, its bar sits sliderLabelHeight below
+func (p *SliderPanel) labelPos(i int) (x int, y int) {
+	column := i / p.rowsPerColumn
+	row := i % p.rowsPerColumn
+	return p.X + column*sliderColumnWidth + panelPadding, sliderTop + row*sliderRowHeight
 }
 
 func (p *SliderPanel) barRect(i int) (x float32, y float32, w float32, h float32) {
-	x = float32(p.X + panelPadding)
-	y = float32(sliderTop + i*sliderRowHeight + sliderLabelHeight)
-	return x, y, panelWidth - 2*panelPadding, sliderBarHeight
+	labelX, labelY := p.labelPos(i)
+	return float32(labelX), float32(labelY + sliderLabelHeight), sliderColumnWidth - 2*panelPadding, sliderBarHeight
 }
 
 // sliderAt returns the index of the slider row under the point, or -1
 func (p *SliderPanel) sliderAt(x int, y int) int {
-	if x < p.X || x >= p.X+panelWidth || y < sliderTop {
+	if x < p.X || x >= p.X+p.Width || y < sliderTop {
 		return -1
 	}
-	i := (y - sliderTop) / sliderRowHeight
+	row := (y - sliderTop) / sliderRowHeight
+	if row >= p.rowsPerColumn {
+		return -1
+	}
+	i := (x-p.X)/sliderColumnWidth*p.rowsPerColumn + row
 	if i >= len(p.Sliders) {
 		return -1
 	}
@@ -138,14 +157,14 @@ func (p *SliderPanel) Update() {
 
 func (p *SliderPanel) Draw(screen *ebiten.Image) {
 
-	vector.DrawFilledRect(screen, float32(p.X), 0, panelWidth, float32(screen.Bounds().Dy()), panelBackground, false)
+	vector.DrawFilledRect(screen, float32(p.X), 0, float32(p.Width), float32(screen.Bounds().Dy()), panelBackground, false)
 
 	ebitenutil.DebugPrintAt(screen, "Drag to change, right click to reset", p.X+panelPadding, 12)
 
 	for i, s := range p.Sliders {
 
 		barX, barY, barW, barH := p.barRect(i)
-		labelY := sliderTop + i*sliderRowHeight
+		_, labelY := p.labelPos(i)
 
 		label := s.Label
 		if *s.Value != s.Default {
