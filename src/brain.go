@@ -11,6 +11,12 @@ type Brain struct {
 	Width        int
 	Height       int
 	BrainSquares [][]BrainSquare
+
+	// Every neuron lives here, each BrainSquare.Neurons is a subslice of it, so it must never be appended to after AddNeurons
+	Neurons []Neuron
+	// Every connection lives here by value, each neuron's outgoing connections are one contiguous block of it
+	Connections []Connection
+
 	// Neurons to check
 	NeuronsToCheck     []*Neuron
 	NextNeuronsToCheck []*Neuron
@@ -71,26 +77,44 @@ func NewBrain(width int, height int, brainPattern []byte) *Brain {
 	}
 }
 
-func (brain *Brain) AddStandardNeurons() {
+// Every non wall square gets a standard (excitatory) neuron, and every square on odd x and odd y also gets a negative (inhibitory) one
+func hasNegativeNeuron(x int, y int) bool {
+	return x%2 == 1 && y%2 == 1
+}
+
+// AddNeurons puts every neuron into the single Brain.Neurons slice, in square order, then points each square's Neurons at its part of it
+// Connections refer to neurons by index into Brain.Neurons, so it is sized exactly up front and never reallocated
+func (brain *Brain) AddNeurons() {
+
+	total := 0
 	for x := 0; x < brain.Width; x++ {
 		for y := 0; y < brain.Height; y++ {
-			var cell = &brain.BrainSquares[x][y]
-			if !cell.isWall {
-				cell.Neurons = append(cell.Neurons, NewNeuron(brain, cell, true))
-				cell.NumberOfNeurons = len(cell.Neurons)
+			if !brain.BrainSquares[x][y].isWall {
+				total++
+				if hasNegativeNeuron(x, y) {
+					total++
+				}
 			}
 		}
 	}
-}
 
-func (brain *Brain) AddNegativeNeurons() {
-	for x := 1; x < brain.Width; x += 2 {
-		for y := 1; y < brain.Height; y += 2 {
+	brain.Neurons = make([]Neuron, 0, total)
+
+	for x := 0; x < brain.Width; x++ {
+		for y := 0; y < brain.Height; y++ {
 			var cell = &brain.BrainSquares[x][y]
-			if !cell.isWall {
-				cell.Neurons = append(cell.Neurons, NewNeuron(brain, cell, false))
-				cell.NumberOfNeurons = len(cell.Neurons)
+			if cell.isWall {
+				continue
 			}
+
+			start := len(brain.Neurons)
+			brain.Neurons = append(brain.Neurons, NewNeuron(brain, cell, uint32(len(brain.Neurons)), true))
+			if hasNegativeNeuron(x, y) {
+				brain.Neurons = append(brain.Neurons, NewNeuron(brain, cell, uint32(len(brain.Neurons)), false))
+			}
+
+			cell.Neurons = brain.Neurons[start:len(brain.Neurons):len(brain.Neurons)] // Capped so an append to a square can't overwrite the next square
+			cell.NumberOfNeurons = len(cell.Neurons)
 		}
 	}
 }

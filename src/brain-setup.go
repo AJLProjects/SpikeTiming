@@ -14,13 +14,9 @@ func SetUpBrain(brainWidth int, brainHeight int, brainPattern []byte) *Brain {
 
 	myBrain := NewBrain(brainWidth, brainHeight, brainPattern)
 
-	myBrain.AddStandardNeurons()
+	myBrain.AddNeurons()
 
-	fmt.Println("Finished adding standard neurons")
-
-	myBrain.AddNegativeNeurons()
-
-	fmt.Println("Finished adding negative neurons")
+	fmt.Println("Finished adding neurons:", len(myBrain.Neurons))
 
 	myBrain.ConnectNeurons()
 

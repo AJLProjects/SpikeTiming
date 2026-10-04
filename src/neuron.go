@@ -13,6 +13,12 @@ var REFACTORY_PEAK_FRACTION = 0.5
 
 var ACTIVATION_DECAY_RATE = 0.98
 
+// Lookup tables for the per cycle decays, so they don't need math.Pow
+var activationDecayPow = NewPowTable(ACTIVATION_DECAY_RATE)
+var thresholdDecayPow = NewPowTable(THRESHOLD_DECAY_RATE)
+
+const THRESHOLD_DECAY_RATE = 0.99
+
 // Neighbour synchrony: when a neuron fires, it counts how many of its 8 surrounding neurons fired recently
 // Each neighbour counts as exp(-timeSinceFired / NEIGHBOUR_FIRE_WINDOW), so the count is continuous rather than a hard cutoff
 // Firing alone rewards its contributing inputs, firing with ~2*NEIGHBOUR_SYNC_CROSSOVER neighbours fully punishes them, to force neighbours to differentiate
@@ -36,8 +42,10 @@ var POST_SYNAPTIC_FIRE_REWARD = 0.1
 type Neuron struct {
 	Brain        *Brain
 	ParentSquare *BrainSquare
-	Incoming     []*Connection
-	Outgoing     []*Connection
+	Index        uint32 // Position in Brain.Neurons
+	Incoming     []IncomingConnection
+	OutStart     uint32 // Outgoing connections are Brain.Connections[OutStart:OutEnd]
+	OutEnd       uint32
 
 	// Basic state (can be expanded)
 	LastfireTime              float64
@@ -53,12 +61,12 @@ type Neuron struct {
 }
 
 // NewNeuron creates and returns a new neuron.
-func NewNeuron(brain *Brain, parentSquare *BrainSquare, isExcitatory bool) Neuron {
+func NewNeuron(brain *Brain, parentSquare *BrainSquare, index uint32, isExcitatory bool) Neuron {
 	return Neuron{
 		Brain:                     brain,
 		ParentSquare:              parentSquare,
-		Incoming:                  make([]*Connection, 0),
-		Outgoing:                  make([]*Connection, 0),
+		Index:                     index,
+		Incoming:                  make([]IncomingConnection, 0),
 		Activation:                rand.Float64()*0.5 + 0.5, //0.5 to 1
 		LastfireTime:              0.0,
 		LastUpdateTime:            0.0,
@@ -75,17 +83,15 @@ func (n *Neuron) RefactoryPeriod() float64 {
 	return REFACTORY_PERIOD + n.RefactoryJitter
 }
 
-// AddIncomingConnection adds a neuron that sends signals *to* this neuron.
-func (n *Neuron) AddIncomingConnection(con *Connection) {
-	n.Incoming = append(n.Incoming, con)
-}
-
-// AddOutgoingConnection adds a neuron that this neuron sends signals *to*.
-func (n *Neuron) AddOutgoingConnection(con *Connection) {
-	n.Outgoing = append(n.Outgoing, con)
+// AddIncomingConnection records a connection (by index) from another neuron that sends signals *to* this neuron.
+func (n *Neuron) AddIncomingConnection(conIndex uint32, from uint32) {
+	n.Incoming = append(n.Incoming, IncomingConnection{Conn: conIndex, From: from})
 }
 
 func (n *Neuron) InitialConnect(brain *Brain, brainSquare *BrainSquare) {
+
+	// This neuron's connections are appended to the end of brain.Connections, so they sit side by side
+	n.OutStart = uint32(len(brain.Connections))
 
 	if n.IsExcitatory {
 		connectExcitatory(brain, brainSquare, n)
@@ -93,10 +99,17 @@ func (n *Neuron) InitialConnect(brain *Brain, brainSquare *BrainSquare) {
 		connectInhibitory(brain, n)
 	}
 
-	// Shuffle outgoing
-	rand.Shuffle(len(n.Outgoing), func(i, j int) {
-		n.Outgoing[i], n.Outgoing[j] = n.Outgoing[j], n.Outgoing[i]
+	n.OutEnd = uint32(len(brain.Connections))
+
+	// Shuffle outgoing, has to happen before the incoming indexes are recorded
+	outgoing := brain.Connections[n.OutStart:n.OutEnd]
+	rand.Shuffle(len(outgoing), func(i, j int) {
+		outgoing[i], outgoing[j] = outgoing[j], outgoing[i]
 	})
+
+	for i := range outgoing {
+		brain.Neurons[outgoing[i].To].AddIncomingConnection(n.OutStart+uint32(i), n.Index)
+	}
 }
 
 func (n *Neuron) CheckForFiring(time float64) {
@@ -122,12 +135,16 @@ func (n *Neuron) CheckForFiring(time float64) {
 		hasOvershot := overshoot > 0
 		//var overshootCorrector = math.Tanh(overshoot/2.0) * 0.3
 
+		neurons := n.Brain.Neurons
+		connections := n.Brain.Connections
+
 		overShootWeightsTotal := 0.0
 		if hasOvershot {
-			for _, c := range n.Incoming {
+			for _, in := range n.Incoming {
+				c := &connections[in.Conn]
 
 				if c.IsAwaitingReward {
-					var conFiredDurationAgo = time - c.From.LastfireTime
+					var conFiredDurationAgo = time - neurons[in.From].LastfireTime
 
 					if conFiredDurationAgo <= 1.0001 {
 						if n.IsExcitatory {
@@ -155,33 +172,37 @@ func (n *Neuron) CheckForFiring(time float64) {
 		quietRewardBonus := 1.0 + QUIET_REWARD_PER_CYCLE*lastFireTimeDelta
 
 		// Send reward or punsih to presynaptic dendrites
-		for _, c := range n.Incoming {
+		for _, in := range n.Incoming {
+			c := &connections[in.Conn]
 			c.UpdateWeightsSince(time)
-			var conFiredDurationAgo = time - c.From.LastfireTime
+			var conFiredDurationAgo = time - neurons[in.From].LastfireTime
 
 			if c.IsAwaitingReward {
 
+				strength := c.Strength
+
 				// Rewards both excitory and inhoibotory neurons
-				contribution := math.Pow(ACTIVATION_DECAY_RATE, conFiredDurationAgo)
+				contribution := activationDecayPow.Pow(ACTIVATION_DECAY_RATE, conFiredDurationAgo)
 
 				idealStrength := contribution * quietRewardBonus
 				// Step towards the ideal by a fixed amount plus a fraction of the gap, capped so it never overshoots the ideal
-				delta := idealStrength - c.Strength
+				delta := idealStrength - strength
 				step := math.Min(math.Abs(delta), POST_SYNAPTIC_FIRE_REWARD*math.Abs(delta)+POST_SYNAPTIC_FIRE_REWARD)
-				c.Strength += math.Copysign(step, delta)
+				strength += math.Copysign(step, delta)
 
-				//c.Strength = RewardValue(c.Strength, 0.06*contribution*quietRewardBonus, 1.5)
+				//strength = RewardValue(strength, 0.06*contribution*quietRewardBonus, 1.5)
 
 				if hasOvershot && conFiredDurationAgo <= 1.0001 {
 					if n.IsExcitatory {
-						relativeConnectionRatio := c.Strength / overShootWeightsTotal
-						c.Strength *= math.Max(1.0-(relativeConnectionRatio*(overshoot/2.0)), 0.0) // Ratio can exceed 1, so clamp to stop it going negative
+						relativeConnectionRatio := strength / overShootWeightsTotal
+						strength *= math.Max(1.0-(relativeConnectionRatio*(overshoot/2.0)), 0.0) // Ratio can exceed 1, so clamp to stop it going negative
 					}
 				}
 
 				// Reward inputs that drove this neuron to fire alone, punish ones that drove it to fire with its neighbours
-				c.Strength = math.Max(Lerp(c.Strength, NEIGHBOUR_SYNC_MAX_STRENGTH, neighbourSyncAmount), 0.00001)
+				strength = math.Max(Lerp(strength, NEIGHBOUR_SYNC_MAX_STRENGTH, neighbourSyncAmount), 0.00001)
 
+				c.Strength = strength
 				c.IsAwaitingReward = false
 			}
 		}
@@ -189,10 +210,13 @@ func (n *Neuron) CheckForFiring(time float64) {
 		// Send signal to postsynaptic neurons
 		n.LastfireTime = time
 		n.Activation = 0
-		for _, c := range n.Outgoing {
+		outgoing := connections[n.OutStart:n.OutEnd]
+		for i := range outgoing {
+			c := &outgoing[i]
+			to := &neurons[c.To]
 
 			c.UpdateWeightsSince(time)
-			c.To.UpdateActivationAndWeightOnly(time)
+			to.UpdateActivationAndWeightOnly(time)
 
 			// Refactory block is how much incoming activation is blocked, 1 is fully blocked and 0 is fully open
 			// It holds at 1 for the peak of the refactory period, then falls away along the tail of a bell to 0 at the end of the period
@@ -202,8 +226,8 @@ func (n *Neuron) CheckForFiring(time float64) {
 			//	|      \
 			//	|       ‾‾‾____
 			//	0   peak       period
-			timeSinceLastFire := time - c.To.LastfireTime
-			refactoryPeriod := c.To.RefactoryPeriod()
+			timeSinceLastFire := time - to.LastfireTime
+			refactoryPeriod := to.RefactoryPeriod()
 			refactoryPeak := refactoryPeriod * REFACTORY_PEAK_FRACTION
 
 			refactoryBlock := 0.0
@@ -211,33 +235,35 @@ func (n *Neuron) CheckForFiring(time float64) {
 				refactoryBlock = 1.0
 			} else if timeSinceLastFire < refactoryPeriod {
 				x := (timeSinceLastFire - refactoryPeak) / (refactoryPeriod - refactoryPeak) // 0 at the peak, 1 at the end of the period
-				refactoryBlock = 0.5 * (1.0 + math.Cos(math.Pi*x))
+				refactoryBlock = CosineFall(x)
 			}
 			passThrough := 1.0 - refactoryBlock
 
-			if c.IsExcitatory {
+			strength := c.Strength
+
+			if n.IsExcitatory { // All of a neuron's outgoing connections share its type
 
 				if refactoryBlock > 0 { // If it has fired into a already spiked cell, weaken by how deep into the refactory period it is
-					c.Strength = PunishValue(c.Strength, 0.05*refactoryBlock)
+					strength = PunishValue(strength, 0.05*refactoryBlock)
 				}
 
 				if passThrough > 0 { // Normal firing, reduced by the refactory block
-					c.To.Activation += c.Strength * passThrough // * PosOnlyRandMultiplier(c.Strength*0.001) // We could add a magnitude multiplyer to the cell, default to 0.15 to allow the growth to always be between 0 and 1
+					to.Activation += strength * passThrough // * PosOnlyRandMultiplier(strength*0.001) // We could add a magnitude multiplyer to the cell, default to 0.15 to allow the growth to always be between 0 and 1
 					c.IsAwaitingReward = true
 				}
 
 				// Because we have added activation to the next neuron we will check if it has fired
-				if !c.To.AlreadyAddedToTocheckList {
-					c.To.AlreadyAddedToTocheckList = true
-					c.To.Brain.NextNeuronsToCheck = append(c.To.Brain.NextNeuronsToCheck, c.To)
+				if !to.AlreadyAddedToTocheckList {
+					to.AlreadyAddedToTocheckList = true
+					n.Brain.NextNeuronsToCheck = append(n.Brain.NextNeuronsToCheck, to)
 				}
 
 			} else { // negative neuron outgoing
 
-				c.To.Activation -= c.Strength * passThrough
+				to.Activation -= strength * passThrough
 			}
 
-			c.Strength *= 0.999 //Tiny amount of punish to stop rapid firing
+			c.Strength = strength * 0.999 //Tiny amount of punish to stop rapid firing
 		}
 	}
 }
@@ -281,9 +307,9 @@ func (n *Neuron) UpdateActivationAndWeightOnly(time float64) {
 
 	var cyclesSince = time - n.LastUpdateTime
 
-	n.Activation *= math.Pow(ACTIVATION_DECAY_RATE, cyclesSince)
+	n.Activation *= activationDecayPow.Pow(ACTIVATION_DECAY_RATE, cyclesSince)
 
-	n.Threshold *= math.Pow(0.99, cyclesSince)
+	n.Threshold *= thresholdDecayPow.Pow(THRESHOLD_DECAY_RATE, cyclesSince)
 
 	n.LastUpdateTime = time
 }
@@ -338,16 +364,14 @@ func connectExcitatory(brain *Brain, brainSquare *BrainSquare, n *Neuron) {
 				neuronToConnectTo := &targetNeuronsSlice[i]
 
 				var con = Connection{
-					From:         n,
-					To:           neuronToConnectTo,
-					IsExcitatory: true,
+					To: neuronToConnectTo.Index,
 				}
 				con.SetDistanceBase(sourceDist)
-				con.Strength = con.BaseStrength * (0.75 + rand.Float64()*0.5) // Start within 25% of the base
+				con.Strength = float64(con.BaseStrength) * (0.75 + rand.Float64()*0.5) // Start within 25% of the base
 				con.LongTermStrength = con.Strength
 
-				n.AddOutgoingConnection(&con)
-				neuronToConnectTo.AddIncomingConnection(&con)
+				// Incoming is recorded by InitialConnect once this neuron's block is shuffled
+				brain.Connections = append(brain.Connections, con)
 				numberOutgoing += 1
 			}
 		}
@@ -386,17 +410,15 @@ func connectInhibitory(brain *Brain, n *Neuron) {
 				neuronToConnectTo := &targetNeuronsSlice[i]
 
 				var con = Connection{
-					From:         n,
-					To:           neuronToConnectTo,
-					IsExcitatory: false,
-					Strength:     rand.Float64() * 0.05,
-					BaseStrength: 0.0, // Inhibitory connections still decay towards 0
-					RelaxDecay:   0.999,
+					To:            neuronToConnectTo.Index,
+					Strength:      rand.Float64() * 0.05,
+					BaseStrength:  0.0, // Inhibitory connections still decay towards 0
+					LogRelaxDecay: float32(math.Log(0.999)),
 				}
 				con.LongTermStrength = con.Strength
 
-				n.AddOutgoingConnection(&con)
-				neuronToConnectTo.AddIncomingConnection(&con)
+				// Incoming is recorded by InitialConnect once this neuron's block is shuffled
+				brain.Connections = append(brain.Connections, con)
 
 				numberOutgoing += 1
 			}

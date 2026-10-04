@@ -1,28 +1,38 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"image/png"
 	"log"
 	"os"
+	"runtime/pprof"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-const screenWidth = 500
-const screenHeight = 500
+// Size of the brain view in screen pixels, set in main to fit the brain at the starting zoom
+var screenWidth int
+var screenHeight int
+
+const START_ZOOM = 1.5
 
 // Wall clock time spent running simulation cycles each tick (ebiten ticks 60 times a second by default)
 // Leaves the rest of the ~16.6ms tick for drawing and input, raise it for a faster simulation but a less responsive window
 const SIM_TIME_BUDGET = 12 * time.Millisecond
 
+// Profiling is off unless run with -cpuprofile, e.g. neuron-grid.exe -cpuprofile cpu.prof
+var cpuProfilePath = flag.String("cpuprofile", "", "write a CPU profile to this file")
+var profileSeconds = flag.Int("profileseconds", 30, "how many seconds of the simulation to profile")
+
 // Draw paints current game state.
 func Draw(zoom float64, camX int, camY int, brain *Brain, pix []byte, time float64) {
 
-	for x := 0; x < screenWidth; x++ {
-		for y := 0; y < screenHeight; y++ {
+	// Screen rows are brain X and screen columns are brain Y
+	for x := 0; x < screenHeight; x++ {
+		for y := 0; y < screenWidth; y++ {
 
 			// Each brain cell is drawn as a zoom x zoom block of screen pixels
 			mappedPosX := int(float64(x)/zoom) + camX
@@ -132,8 +142,7 @@ func (g *Game) Update() error {
 				fmt.Println("Activation: ", neuron.Activation)
 
 				for _, in := range neuron.Incoming {
-					fmt.Println("in str: ", in.From.IsExcitatory, in.Strength)
-					fmt.Println("in exp: ", in.DebugLast)
+					fmt.Println("in str: ", g.brain.Neurons[in.From].IsExcitatory, g.brain.Connections[in.Conn].Strength)
 				}
 			}
 		}
@@ -204,7 +213,29 @@ func imageToRGBA(img image.Image) []uint8 {
 	return raw
 }
 
+// startCPUProfile records where CPU time goes for the given duration, then writes it to path
+// View it with: go tool pprof -top neuron-grid.exe cpu.prof
+func startCPUProfile(path string, duration time.Duration) {
+	f, err := os.Create(path)
+	if err != nil {
+		log.Fatal("Could not create CPU profile: ", err)
+	}
+	if err := pprof.StartCPUProfile(f); err != nil {
+		log.Fatal("Could not start CPU profile: ", err)
+	}
+	fmt.Printf("Profiling CPU for %v...\n", duration)
+
+	go func() {
+		time.Sleep(duration)
+		pprof.StopCPUProfile()
+		f.Close()
+		fmt.Println("Wrote CPU profile to", path)
+	}()
+}
+
 func main() {
+
+	flag.Parse()
 
 	file, err := os.Open("map/brain-map.png")
 	if err != nil {
@@ -224,12 +255,28 @@ func main() {
 
 	var brain = SetUpBrain(img.Bounds().Dx(), img.Bounds().Dy(), rgbaPixels)
 
+	// Size the view to show the whole brain at the starting zoom, screen columns are brain Y and rows are brain X
+	screenWidth = int(float64(brain.Height) * START_ZOOM)
+	screenHeight = int(float64(brain.Width) * START_ZOOM)
+
+	// Don't make the window bigger than the monitor, leaving room for the title bar and taskbar
+	monitorWidth, monitorHeight := ebiten.Monitor().Size()
+	if monitorWidth > 0 && monitorHeight > 0 {
+		screenWidth = min(screenWidth, monitorWidth-panelWidth)
+		screenHeight = min(screenHeight, monitorHeight-100)
+	}
+
+	// Started after setup so the profile only covers the running simulation
+	if *cpuProfilePath != "" {
+		startCPUProfile(*cpuProfilePath, time.Duration(*profileSeconds)*time.Second)
+	}
+
 	g := &Game{
 		brain:  brain,
 		pixels: make([]byte, screenWidth*screenHeight*4),
 		camX:   0,
 		camY:   0,
-		zoom:   1.5,
+		zoom:   START_ZOOM,
 
 		brainImage: ebiten.NewImage(screenWidth, screenHeight),
 		panel:      NewSliderPanel(screenWidth),
