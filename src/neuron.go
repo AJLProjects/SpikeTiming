@@ -165,15 +165,17 @@ func (n *Neuron) CheckForFiring(time float64) {
 				contribution := math.Pow(ACTIVATION_DECAY_RATE, conFiredDurationAgo)
 
 				idealStrength := contribution * quietRewardBonus
-				delta := math.Abs(c.Strength - idealStrength)
-				c.Strength = Lerp(c.Strength, idealStrength, POST_SYNAPTIC_FIRE_REWARD+POST_SYNAPTIC_FIRE_REWARD/delta)
+				// Step towards the ideal by a fixed amount plus a fraction of the gap, capped so it never overshoots the ideal
+				delta := idealStrength - c.Strength
+				step := math.Min(math.Abs(delta), POST_SYNAPTIC_FIRE_REWARD*math.Abs(delta)+POST_SYNAPTIC_FIRE_REWARD)
+				c.Strength += math.Copysign(step, delta)
 
 				//c.Strength = RewardValue(c.Strength, 0.06*contribution*quietRewardBonus, 1.5)
 
 				if hasOvershot && conFiredDurationAgo <= 1.0001 {
 					if n.IsExcitatory {
 						relativeConnectionRatio := c.Strength / overShootWeightsTotal
-						c.Strength *= 1.0 - (relativeConnectionRatio * (overshoot / 2.0))
+						c.Strength *= math.Max(1.0-(relativeConnectionRatio*(overshoot/2.0)), 0.0) // Ratio can exceed 1, so clamp to stop it going negative
 					}
 				}
 

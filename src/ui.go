@@ -72,7 +72,7 @@ func NewSliderPanel(x int) *SliderPanel {
 			slider("Refactory peak fraction", &REFACTORY_PEAK_FRACTION, 0, 1, false),
 			slider("Activation decay rate", &ACTIVATION_DECAY_RATE, 0.8, 0.999, false),
 			slider("Neighbour punish/reward fire window", &NEIGHBOUR_FIRE_WINDOW, 0.5, 50, true),
-			slider("Neighbour sync rate", &NEIGHBOUR_SYNC_RATE, 0, 0.5, false),
+			slider("Neighbour sync rate", &NEIGHBOUR_SYNC_RATE, 0, 1, false),
 			slider("Neighbour sync crossover from good to bad", &NEIGHBOUR_SYNC_CROSSOVER, 0.25, 8, false),
 			slider("Neighbour sync max strength", &NEIGHBOUR_SYNC_MAX_STRENGTH, 0.1, 3, false),
 			slider("Quiet reward per cycle", &QUIET_REWARD_PER_CYCLE, 0.00001, 0.05, true),

@@ -38,19 +38,27 @@ func NewBrain(width int, height int, brainPattern []byte) *Brain {
 			// Its wall if its black
 			isWall := (brainPattern[patternPos+0] == 0 && brainPattern[patternPos+1] == 0 && brainPattern[patternPos+2] == 0)
 
-			var xAmount = float64((float64(brainPattern[patternPos+0] - 127.0)) / 127.0)
-			var yAmount = float64((float64(brainPattern[patternPos+1] - 127.0)) / 127.0)
+			// Convert to float before subtracting, otherwise the byte subtraction wraps around for values below 127
+			var xAmount = (float64(brainPattern[patternPos+0]) - 127.0) / 127.0
+			var yAmount = (float64(brainPattern[patternPos+1]) - 127.0) / 127.0
 
 			var m = math.Sqrt(xAmount*xAmount + yAmount*yAmount)
 
 			//fmt.Printf("Dirvec: %v, %v \n", xAmount/m, 1.0/m)
 
+			// No direction (exactly mid grey) leaves the dir vec at zero rather than dividing by zero
+			var dirVecX, dirVecY float64
+			if m > 0 {
+				dirVecX = yAmount / m // Flipped because the pattern is read transposed, BrainSquares[x][y] is image row x, column y
+				dirVecY = xAmount / m
+			}
+
 			brainSquares[x][y] = BrainSquare{
 				PosX:    int(x),
 				PosY:    int(y),
 				isWall:  isWall,
-				DirVecX: yAmount / m, // Not sure why these have to flip round
-				DirVecY: xAmount / m,
+				DirVecX: dirVecX,
+				DirVecY: dirVecY,
 			}
 		}
 	}
@@ -131,9 +139,10 @@ func (brain *Brain) WrapPosition(x int, y int) (outX int, outY int) {
 func (brain *Brain) Update(time float64) {
 
 	//var num = rand.Int32()
-	var randomSquare = brain.BrainSquares[rand.Intn(brain.Width)][rand.Intn(brain.Height)]
+	// Pointers, so the input goes to the real neuron rather than a copy
+	var randomSquare = &brain.BrainSquares[rand.Intn(brain.Width)][rand.Intn(brain.Height)]
 	if !randomSquare.isWall {
-		var pickedNeuron = randomSquare.Neurons[0]
+		var pickedNeuron = &randomSquare.Neurons[0]
 		pickedNeuron.AddActivationInput(3, time)
 	}
 
