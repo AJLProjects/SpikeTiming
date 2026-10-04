@@ -74,9 +74,17 @@ func NewSliderPanel(x int) *SliderPanel {
 			slider("Neighbour punish/reward fire window", &NEIGHBOUR_FIRE_WINDOW, 0.5, 50, true),
 			slider("Neighbour sync rate", &NEIGHBOUR_SYNC_RATE, 0, 1, false),
 			slider("Neighbour sync crossover from good to bad", &NEIGHBOUR_SYNC_CROSSOVER, 0.25, 8, false),
-			slider("Neighbour sync max strength", &NEIGHBOUR_SYNC_MAX_STRENGTH, 0.1, 3, false),
 			slider("Quiet reward per cycle", &QUIET_REWARD_PER_CYCLE, 0.00001, 0.05, true),
 			slider("Post synaptic fire reward", &POST_SYNAPTIC_FIRE_REWARD, 0, 0.5, false),
+			slider("Threshold decay rate", &THRESHOLD_DECAY_RATE, 0.9, 0.9999, false),
+			slider("Desire to fire (cycles per -1 threshold)", &DESIRE_TO_FIRE_CYCLES, 100, 100000, true),
+			slider("Threshold reset target after fire", &THRESHOLD_RESET_TARGET, 0.2, 3, false),
+			slider("Threshold reset rate after fire", &THRESHOLD_RESET_RATE, 0, 1, false),
+			slider("Overshoot threshold", &OVERSHOOT_THRESHOLD, 0.5, 3, false),
+			slider("Overshoot punish", &OVERSHOOT_PUNISH, 0, 2, false),
+			slider("Refactory hit punish", &REFACTORY_HIT_PUNISH, 0, 0.5, false),
+			slider("Strength decay per fire", &FIRE_STRENGTH_DECAY, 0.99, 1, false),
+			slider("Minimum connection strength", &MINIMIM_CONNECTION_STRENGTH, 0.0000001, 0.01, true),
 		},
 	}
 }

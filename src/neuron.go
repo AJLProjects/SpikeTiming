@@ -6,7 +6,7 @@ import (
 )
 
 // These are vars rather than consts so the slider panel (ui.go) can change them while the simulation runs
-var REFACTORY_PERIOD = 7.0
+var REFACTORY_PERIOD = 16.0
 
 // Fraction of the refactory period that is fully blocked (absolute refactory period) before the block falls away in a bell shaped tail (relative refactory period)
 var REFACTORY_PEAK_FRACTION = 0.5
@@ -17,15 +17,31 @@ var ACTIVATION_DECAY_RATE = 0.98
 var activationDecayPow = NewPowTable(ACTIVATION_DECAY_RATE)
 var thresholdDecayPow = NewPowTable(THRESHOLD_DECAY_RATE)
 
-const THRESHOLD_DECAY_RATE = 0.99
+var THRESHOLD_DECAY_RATE = 0.99
+
+// Desire to fire: the threshold drops by 1 for every DESIRE_TO_FIRE_CYCLES cycles a neuron goes without firing, so silent neurons get easier to fire
+var DESIRE_TO_FIRE_CYCLES = 8000.0
+
+// After a fire the threshold is lerped towards THRESHOLD_RESET_TARGET by THRESHOLD_RESET_RATE, since it is always decaying this brings it back up to 'normal'
+var THRESHOLD_RESET_TARGET = 1.1
+var THRESHOLD_RESET_RATE = 0.3
+
+// Overshoot: activation above OVERSHOOT_THRESHOLD when firing punishes the inputs from the last cycle, scaled by OVERSHOOT_PUNISH
+var OVERSHOOT_THRESHOLD = 1.2
+var OVERSHOOT_PUNISH = 0.5
+
+// How much an excitatory connection is weakened for firing into a neuron in its refactory period, scaled by how blocked it is
+var REFACTORY_HIT_PUNISH = 0.05
+
+// Every outgoing connection is multiplied by this each time its neuron fires, a tiny punish to stop rapid firing
+var FIRE_STRENGTH_DECAY = 0.999
 
 // Neighbour synchrony: when a neuron fires, it counts how many of its 8 surrounding neurons fired recently
 // Each neighbour counts as exp(-timeSinceFired / NEIGHBOUR_FIRE_WINDOW), so the count is continuous rather than a hard cutoff
 // Firing alone rewards its contributing inputs, firing with ~2*NEIGHBOUR_SYNC_CROSSOVER neighbours fully punishes them, to force neighbours to differentiate
-var NEIGHBOUR_FIRE_WINDOW = 2.0       // Time constant in cycles, a neighbour that fired this many cycles ago counts as ~0.37 of a neighbour
-var NEIGHBOUR_SYNC_RATE = 0.5         // Lerp amount at full reward (0 neighbours) or full punish (2*crossover neighbours)
-var NEIGHBOUR_SYNC_CROSSOVER = 1.5    // Number of recently fired neighbours where it switches from reward to punish
-var NEIGHBOUR_SYNC_MAX_STRENGTH = 1.5 // Strength that a reward lerps towards, a punish lerps towards 0
+var NEIGHBOUR_FIRE_WINDOW = 4.0    // Time constant in cycles, a neighbour that fired this many cycles ago counts as ~0.37 of a neighbour
+var NEIGHBOUR_SYNC_RATE = 0.4      // Lerp amount at full reward (0 neighbours) or full punish (2*crossover neighbours)
+var NEIGHBOUR_SYNC_CROSSOVER = 1.5 // Number of recently fired neighbours where it switches from reward to punish
 
 // Quiet neuron bonus: the longer a neuron has gone without firing, the more its contributing inputs are rewarded when it finally fires
 // Accumulates linearly as 1 + QUIET_REWARD_PER_CYCLE * cycles of silence, so a long silent neuron can be recruited back into the network
@@ -37,6 +53,8 @@ var QUIET_REWARD_PER_CYCLE = 0.001 // Extra reward multiplier added for each cyc
 
 // When there is a presynaptic fire then a postsynaptic fire with meaningful contribution, then it will reward the connection endrite this amount
 var POST_SYNAPTIC_FIRE_REWARD = 0.1
+
+var MINIMIM_CONNECTION_STRENGTH = 0.00001 // Connections are pruned if they fall below this strength, so they don't linger forever
 
 // Neuron represents a single neuron in the network.
 type Neuron struct {
@@ -118,7 +136,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 
 	// Recalculate threshold
 	var lastFireTimeDelta = time - n.LastfireTime
-	var desireToFireComp = -lastFireTimeDelta / 8000 //math.Min(lastFireTimeDelta/8000, 0.8)
+	var desireToFireComp = -lastFireTimeDelta / DESIRE_TO_FIRE_CYCLES
 	//var absoluteRefactoryPeriod = REFACTORY_PERIOD * 2
 	//var justFiredDepolarization = math.Pow(math.Max(absoluteRefactoryPeriod-lastFireTimeDelta, 0)/absoluteRefactoryPeriod, 0.5) * 3 // Multiply the SPIKE_DURATION by 2 to get teh absolute refactory period
 	virtualThreshold := n.Threshold + desireToFireComp // + justFiredDepolarization
@@ -126,12 +144,12 @@ func (n *Neuron) CheckForFiring(time float64) {
 	// No hard refactory check here, incoming activation is scaled down by the refactory block instead so only a big enough input can fire it during the tail
 	if n.Activation >= virtualThreshold { // SUCCESSFUL FIRE!!!
 
-		n.Threshold = Lerp(n.Threshold, 1.1, 0.3) // Threshold is always falling so this brings it back up to 'normal'
+		n.Threshold = Lerp(n.Threshold, THRESHOLD_RESET_TARGET, THRESHOLD_RESET_RATE) // Threshold is always falling so this brings it back up to 'normal'
 
 		// Because the simulation is in timesteps, it can be overshot, whereas in nature, as soon at the spike occurs, it will weaken any more
 
 		//var overShootThreshold = 1.5 // Need to add 0.5 because a single normal fire may overshoot naturally
-		var overshoot = math.Max(n.Activation-1.2, 0.0)
+		var overshoot = math.Max(n.Activation-OVERSHOOT_THRESHOLD, 0.0)
 		hasOvershot := overshoot > 0
 		//var overshootCorrector = math.Tanh(overshoot/2.0) * 0.3
 
@@ -156,17 +174,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 			}
 		}
 
-		// Signed sync amount from the soft count of recently fired neighbours, +1 is full reward, -1 is full punish
-		// With the default crossover of 1.5:
-		//   0 neighbours   -> +1   (fired alone, full reward)
-		//   1 neighbour    -> +0.33
-		//   1.5 neighbours -> 0    (neutral)
-		//   2 neighbours   -> -0.33
-		//   3+ neighbours  -> -1   (full punish)
-		neighbourSync := 1.0 - n.RecentlyFiredNeighbourCount(time)/NEIGHBOUR_SYNC_CROSSOVER
-		neighbourSync = math.Max(-1.0, math.Min(1.0, neighbourSync))
-
-		neighbourSyncAmount := math.Abs(neighbourSync) * NEIGHBOUR_SYNC_RATE
+		neighbourCount := n.RecentlyFiredNeighbourCount(time)
 
 		// Reward multiplier for how long this neuron was silent, LastfireTime hasn't been reset yet so lastFireTimeDelta is the silence
 		quietRewardBonus := 1.0 + QUIET_REWARD_PER_CYCLE*lastFireTimeDelta
@@ -195,12 +203,14 @@ func (n *Neuron) CheckForFiring(time float64) {
 				if hasOvershot && conFiredDurationAgo <= 1.0001 {
 					if n.IsExcitatory {
 						relativeConnectionRatio := strength / overShootWeightsTotal
-						strength *= math.Max(1.0-(relativeConnectionRatio*(overshoot/2.0)), 0.0) // Ratio can exceed 1, so clamp to stop it going negative
+						strength *= math.Max(1.0-(relativeConnectionRatio*overshoot*OVERSHOOT_PUNISH), 0.0) // Ratio can exceed 1, so clamp to stop it going negative
 					}
 				}
 
 				// Reward inputs that drove this neuron to fire alone, punish ones that drove it to fire with its neighbours
-				strength = math.Max(Lerp(strength, NEIGHBOUR_SYNC_MAX_STRENGTH, neighbourSyncAmount), 0.00001)
+				neighbourPunishFrac := neighbourCount / NEIGHBOUR_SYNC_CROSSOVER
+				neighbourPunishFrac = neighbourPunishFrac * neighbourPunishFrac
+				strength = math.Max(Lerp(strength, strength/neighbourPunishFrac, NEIGHBOUR_SYNC_RATE), MINIMIM_CONNECTION_STRENGTH)
 
 				c.Strength = strength
 				c.IsAwaitingReward = false
@@ -244,7 +254,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 			if n.IsExcitatory { // All of a neuron's outgoing connections share its type
 
 				if refactoryBlock > 0 { // If it has fired into a already spiked cell, weaken by how deep into the refactory period it is
-					strength = PunishValue(strength, 0.05*refactoryBlock)
+					strength = PunishValue(strength, REFACTORY_HIT_PUNISH*refactoryBlock)
 				}
 
 				if passThrough > 0 { // Normal firing, reduced by the refactory block
@@ -263,7 +273,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 				to.Activation -= strength * passThrough
 			}
 
-			c.Strength = strength * 0.999 //Tiny amount of punish to stop rapid firing
+			c.Strength = strength * FIRE_STRENGTH_DECAY // Tiny amount of punish to stop rapid firing
 		}
 	}
 }

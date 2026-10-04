@@ -1,15 +1,13 @@
 
 
-GOAL
-- Multilayerd firing 
-- More sparse
-- Homeostatic
-- Things don't vanish to infinity and never fire. Again homeostatis prevents this.
+- Some kind of nonlinearity of reward?
+    - Reward nonlinearity slider?
 
 
-- Ball and chain
+- Readd multithreading strips, maybe add a slider which locks to whole numbers
+    - Recalculates on change
 
-
+- Maybe we add a slider for sizes?
 
 
 
