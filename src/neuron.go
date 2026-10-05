@@ -39,9 +39,10 @@ var FIRE_STRENGTH_DECAY = 0.999
 // Neighbour synchrony: when a neuron fires, it counts how many of its 8 surrounding neurons fired recently
 // Each neighbour counts as exp(-timeSinceFired / NEIGHBOUR_FIRE_WINDOW), so the count is continuous rather than a hard cutoff
 // Firing alone rewards its contributing inputs, firing with ~2*NEIGHBOUR_SYNC_CROSSOVER neighbours fully punishes them, to force neighbours to differentiate
-var NEIGHBOUR_FIRE_WINDOW = 4.0    // Time constant in cycles, a neighbour that fired this many cycles ago counts as ~0.37 of a neighbour
-var NEIGHBOUR_SYNC_RATE = 0.8      // Lerp amount at full reward (0 neighbours) or full punish (2*crossover neighbours)
-var NEIGHBOUR_SYNC_CROSSOVER = 1.5 // Number of recently fired neighbours where it switches from reward to punish
+var NEIGHBOUR_FIRE_WINDOW = 4.0     // Time constant in cycles, a neighbour that fired this many cycles ago counts as ~0.37 of a neighbour
+var NEIGHBOUR_SYNC_RATE = 0.8       // Lerp amount at full reward (0 neighbours) or full punish (2*crossover neighbours)
+var NEIGHBOUR_SYNC_MULTIPLYER = 1.0 // How much the neighbour count is multiplied by before comparing to NEIGHBOUR_SYNC_CROSSOVER
+var NEIGHBOUR_SYNC_CROSSOVER = 1.5  // Number of recently fired neighbours where it switches from reward to punish
 
 // Quiet neuron bonus: the longer a neuron has gone without firing, the more its contributing inputs are rewarded when it finally fires
 // Accumulates linearly as 1 + QUIET_REWARD_PER_CYCLE * cycles of silence, so a long silent neuron can be recruited back into the network
@@ -57,6 +58,10 @@ var POST_SYNAPTIC_FIRE_REWARD = 0.1
 // The contribution (0 to 1) is raised to this power before setting the ideal strength
 // 1 is linear, above 1 favours the inputs that fired just before, below 1 spreads the reward more evenly across older inputs
 var REWARD_NONLINEARITY = 1.0
+
+// 0 to 1, how much a reward/punish step scales with the connection's current strength
+// 0 is a flat step, 1 makes the step proportional to the current strength
+var AMOUNT_IT_GROWS_RELATIONAL_TO_CURRENT = 0.5
 
 var MINIMIM_CONNECTION_STRENGTH = 0.00001 // Connections are pruned if they fall below this strength, so they don't linger forever
 
@@ -196,10 +201,13 @@ func (n *Neuron) CheckForFiring(time float64) {
 				// Rewards both excitory and inhoibotory neurons
 				contribution := activationDecayPow.Pow(ACTIVATION_DECAY_RATE, conFiredDurationAgo)
 
-				idealStrength := math.Pow(contribution, REWARD_NONLINEARITY) * quietRewardBonus
+				idealStrength := math.Pow(contribution, REWARD_NONLINEARITY)*quietRewardBonus - MINIMIM_CONNECTION_STRENGTH
 				// Step towards the ideal by a fixed amount plus a fraction of the gap, capped so it never overshoots the ideal
 				delta := idealStrength - strength
-				step := math.Min(math.Abs(delta), POST_SYNAPTIC_FIRE_REWARD*math.Abs(delta)+POST_SYNAPTIC_FIRE_REWARD)
+				step := math.Min(math.Abs(delta), POST_SYNAPTIC_FIRE_REWARD*math.Abs(delta))
+
+				step = step*(1.0-AMOUNT_IT_GROWS_RELATIONAL_TO_CURRENT) + step*c.Strength*AMOUNT_IT_GROWS_RELATIONAL_TO_CURRENT
+
 				strength += math.Copysign(step, delta)
 
 				//strength = RewardValue(strength, 0.06*contribution*quietRewardBonus, 1.5)
@@ -213,7 +221,7 @@ func (n *Neuron) CheckForFiring(time float64) {
 
 				// Reward inputs that drove this neuron to fire alone, punish ones that drove it to fire with its neighbours
 				neighbourPunishFrac := neighbourCount / NEIGHBOUR_SYNC_CROSSOVER
-				neighbourPunishFrac = neighbourPunishFrac * neighbourPunishFrac
+				neighbourPunishFrac = neighbourPunishFrac * neighbourPunishFrac * NEIGHBOUR_SYNC_MULTIPLYER
 				strength = math.Max(Lerp(strength, strength/neighbourPunishFrac, NEIGHBOUR_SYNC_RATE), MINIMIM_CONNECTION_STRENGTH)
 
 				c.Strength = strength
