@@ -6,12 +6,12 @@ import (
 )
 
 // These are vars rather than consts so the slider panel (ui.go) can change them while the simulation runs
-var REFACTORY_PERIOD = 16.0
+var REFACTORY_PERIOD = 20.5
 
 // Fraction of the refactory period that is fully blocked (absolute refactory period) before the block falls away in a bell shaped tail (relative refactory period)
 var REFACTORY_PEAK_FRACTION = 0.5
 
-var ACTIVATION_DECAY_RATE = 0.98
+var ACTIVATION_DECAY_RATE = 0.9895
 
 // Lookup tables for the per cycle decays, so they don't need math.Pow
 var activationDecayPow = NewPowTable(ACTIVATION_DECAY_RATE)
@@ -27,11 +27,11 @@ var THRESHOLD_RESET_TARGET = 1.1
 var THRESHOLD_RESET_RATE = 0.3
 
 // Overshoot: activation above OVERSHOOT_THRESHOLD when firing punishes the inputs from the last cycle, scaled by OVERSHOOT_PUNISH
-var OVERSHOOT_THRESHOLD = 1.2
+var OVERSHOOT_THRESHOLD = 1.015
 var OVERSHOOT_PUNISH = 0.5
 
 // How much an excitatory connection is weakened for firing into a neuron in its refactory period, scaled by how blocked it is
-var REFACTORY_HIT_PUNISH = 0.05
+var REFACTORY_HIT_PUNISH = 0.06
 
 // Every outgoing connection is multiplied by this each time its neuron fires, a tiny punish to stop rapid firing
 var FIRE_STRENGTH_DECAY = 0.999
@@ -39,10 +39,10 @@ var FIRE_STRENGTH_DECAY = 0.999
 // Neighbour synchrony: when a neuron fires, it counts how many of its 8 surrounding neurons fired recently
 // Each neighbour counts as exp(-timeSinceFired / NEIGHBOUR_FIRE_WINDOW), so the count is continuous rather than a hard cutoff
 // Firing alone rewards its contributing inputs, firing with ~2*NEIGHBOUR_SYNC_CROSSOVER neighbours fully punishes them, to force neighbours to differentiate
-var NEIGHBOUR_FIRE_WINDOW = 4.0     // Time constant in cycles, a neighbour that fired this many cycles ago counts as ~0.37 of a neighbour
-var NEIGHBOUR_SYNC_RATE = 0.8       // Lerp amount at full reward (0 neighbours) or full punish (2*crossover neighbours)
-var NEIGHBOUR_SYNC_MULTIPLYER = 1.0 // How much the neighbour count is multiplied by before comparing to NEIGHBOUR_SYNC_CROSSOVER
-var NEIGHBOUR_SYNC_CROSSOVER = 1.5  // Number of recently fired neighbours where it switches from reward to punish
+var NEIGHBOUR_FIRE_WINDOW = 5.0      // Time constant in cycles, a neighbour that fired this many cycles ago counts as ~0.37 of a neighbour
+var NEIGHBOUR_SYNC_RATE = 0.8        // Lerp amount at full reward (0 neighbours) or full punish (2*crossover neighbours)
+var NEIGHBOUR_SYNC_MULTIPLYER = 0.13 // How much the neighbour count is multiplied by before comparing to NEIGHBOUR_SYNC_CROSSOVER
+var NEIGHBOUR_SYNC_CROSSOVER = 1.5   // Number of recently fired neighbours where it switches from reward to punish
 
 // Quiet neuron bonus: the longer a neuron has gone without firing, the more its contributing inputs are rewarded when it finally fires
 // Accumulates linearly as 1 + QUIET_REWARD_PER_CYCLE * cycles of silence, so a long silent neuron can be recruited back into the network
@@ -50,10 +50,10 @@ var NEIGHBOUR_SYNC_CROSSOVER = 1.5  // Number of recently fired neighbours where
 //	200 cycles   -> x1.2
 //	1000 cycles  -> x2.0
 //	3000 cycles  -> x4.0
-var QUIET_REWARD_PER_CYCLE = 0.001 // Extra reward multiplier added for each cycle the neuron has gone without firing
+var QUIET_REWARD_PER_CYCLE = 0.0001 // Extra reward multiplier added for each cycle the neuron has gone without firing
 
 // When there is a presynaptic fire then a postsynaptic fire with meaningful contribution, then it will reward the connection endrite this amount
-var POST_SYNAPTIC_FIRE_REWARD = 0.1
+var POST_SYNAPTIC_FIRE_REWARD = 0.3
 
 // The contribution (0 to 1) is raised to this power before setting the ideal strength
 // 1 is linear, above 1 favours the inputs that fired just before, below 1 spreads the reward more evenly across older inputs
@@ -61,7 +61,7 @@ var REWARD_NONLINEARITY = 1.0
 
 // 0 to 1, how much a reward/punish step scales with the connection's current strength
 // 0 is a flat step, 1 makes the step proportional to the current strength
-var AMOUNT_IT_GROWS_RELATIONAL_TO_CURRENT = 0.5
+var AMOUNT_IT_GROWS_RELATIONAL_TO_CURRENT = 0.2
 
 var MINIMIM_CONNECTION_STRENGTH = 0.00001 // Connections are pruned if they fall below this strength, so they don't linger forever
 

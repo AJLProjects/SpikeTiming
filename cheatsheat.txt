@@ -1,9 +1,0 @@
-strips := make([]MultithreadStrip, 0, numberOfStrips)
-
-strips = append(strips, MultithreadStrip{
-    
-})
-
-for _, element := range someSlice {
-
-for i := -1; i <= 1; i++ {
